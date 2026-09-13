@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace WhollyCrypto\Http;
 
-final readonly class Response
+final class Response
 {
+    use \WhollyCrypto\Internal\RejectDynamicProperties;
+
     /** @var array<string, string> */
-    private array $headers;
+    private readonly array $headers;
 
     /** @param array<string, string> $headers */
-    public function __construct(public int $statusCode, array $headers, private string $body)
+    public function __construct(public readonly int $statusCode, array $headers, private readonly string $body)
     {
         $normalized = [];
         foreach ($headers as $name => $value) {

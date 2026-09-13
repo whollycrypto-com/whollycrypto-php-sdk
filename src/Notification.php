@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace WhollyCrypto;
 
-final readonly class Notification
+final class Notification
 {
+    use Internal\RejectDynamicProperties;
+
     /** @param array<string, mixed> $payload */
-    public function __construct(public string $eventId, public string $deliveryId, public array $payload)
+    public function __construct(public readonly string $eventId, public readonly string $deliveryId, public readonly array $payload)
     {
     }
 

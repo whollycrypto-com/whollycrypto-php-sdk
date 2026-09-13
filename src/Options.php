@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace WhollyCrypto;
 
-final readonly class Options
+final class Options
 {
+    use Internal\RejectDynamicProperties;
+
     public function __construct(
-        public int $timeoutSeconds = 20,
-        public int $connectTimeoutSeconds = 5,
-        public int $maxRetries = 0,
-        public int $maxRetryDelaySeconds = 60,
-        public bool $allowInsecureLocalhost = false,
-        public int $maxResponseBytes = 8_388_608,
+        public readonly int $timeoutSeconds = 20,
+        public readonly int $connectTimeoutSeconds = 5,
+        public readonly int $maxRetries = 0,
+        public readonly int $maxRetryDelaySeconds = 60,
+        public readonly bool $allowInsecureLocalhost = false,
+        public readonly int $maxResponseBytes = 8_388_608,
     ) {
         if ($timeoutSeconds < 1 || $timeoutSeconds > 120
             || $connectTimeoutSeconds < 1 || $connectTimeoutSeconds > $timeoutSeconds

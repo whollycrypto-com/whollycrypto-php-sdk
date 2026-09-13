@@ -11,6 +11,8 @@ When a public merchant route, request, response or permission changes:
 2. Update client methods, documentation and `tests/fixtures/api-v1.json` together.
 3. Add wire-level, error, precision and callback tests as relevant.
 4. Run `composer validate --strict`, `composer lint`, `composer test` and the PHP matrix when CI is enabled.
+   Always verify syntax and tests on the minimum PHP 8.1 runtime, not only with
+   Composer's emulated platform setting.
 5. Review the diff and archive contents, update `Client::VERSION` and changelog,
    then create an immutable semantic-version Git tag and GitHub release.
 6. Verify Packagist sees the version and test a clean `composer require`.

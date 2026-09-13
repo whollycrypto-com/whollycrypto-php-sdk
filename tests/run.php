@@ -91,6 +91,48 @@ function invokeEndpoint(Client $client, string $id, ?array $body): array
 }
 
 $tests = [];
+$tests['PHP 8.1-compatible value objects retain readonly and no-dynamic-property protections'] = static function (): void {
+    $options = new Options();
+    $request = new Request('GET', 'https://api.example.test/healthz', ['Authorization' => 'Bearer ' . TOKEN]);
+    $response = new Response(200, ['Content-Type' => 'application/json'], '{}');
+    $notification = new WhollyCrypto\Notification(PROJECT, STORE, ['invoice_id' => INVOICE, 'sequence' => 1, 'status' => 'settled']);
+
+    foreach ([$options, $request, $response, $notification] as $value) {
+        foreach ((new ReflectionObject($value))->getProperties() as $property) {
+            check($property->isReadOnly(), 'Every value-object property must remain readonly.');
+        }
+        throws(static function () use ($value): void { $value->extra = 'not-allowed'; }, Error::class);
+        check(!property_exists($value, 'extra'));
+    }
+    throws(static function () use ($options): void { $options->timeoutSeconds = 99; }, Error::class);
+    throws(static function () use ($options): void { unset($options->maxRetries); }, Error::class);
+    throws(static function () use ($request): void { $request->url = 'https://untrusted.example.test'; }, Error::class);
+    throws(static function () use ($response): void { $response->statusCode = 201; }, Error::class);
+    throws(static function () use ($notification): void { $notification->payload['status'] = 'invalid'; }, Error::class);
+    throws(static function () use ($request): void { $request->headers = []; }, Error::class);
+    $headers = $request->headers();
+    $headers['Authorization'] = 'changed-copy';
+    same('Bearer ' . TOKEN, $request->headers()['Authorization']);
+    same('settled', $notification->status());
+};
+
+$tests['argument-free exception traces protect credentials on PHP 8.1 and newer'] = static function (): void {
+    $previous = ini_set('zend.exception_ignore_args', '1');
+    check($previous !== false, 'Tests require configurable exception argument capture.');
+    try {
+        $error = throws(static fn () => new Client('http://api.example.test', TOKEN), InvalidArgumentException::class);
+        $webhookError = throws(static fn () => Webhook::verify('{}', null, TOKEN, toleranceSeconds: -1), InvalidArgumentException::class);
+        foreach ([$error, $webhookError] as $caught) {
+            foreach ($caught->getTrace() as $frame) {
+                check(!isset($frame['args']), 'Configured PHP must omit trace arguments.');
+            }
+            check(!str_contains((string) $caught, TOKEN));
+        }
+    } finally {
+        ini_set('zend.exception_ignore_args', $previous);
+    }
+};
+
 $tests['all 17 public merchant endpoints, methods, bodies, auth and response envelopes'] = static function (): void {
     $catalog = json_decode(file_get_contents(__DIR__ . '/fixtures/api-v1.json'), true, 512, JSON_THROW_ON_ERROR);
     same(17, count($catalog['endpoints']));

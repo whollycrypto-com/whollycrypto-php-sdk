@@ -3,8 +3,8 @@
 The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
-PHP **8.2+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **1.0.0** targets API **v1**, tested against merchant **3.5.0**.
+PHP **8.1+**, cURL and JSON. No framework or third-party runtime packages.
+SDK **1.0.1** targets API **v1**, tested against merchant **3.5.0**.
 The SDK and merchant application have independent version numbers.
 
 ## Install
@@ -251,6 +251,11 @@ to 8 MiB by default; HTML login pages and malformed JSON are rejected. Configure
 the API origin on your server, never from a customer's request. Custom transports
 receive your API token and must be trusted.
 
+On PHP 8.1, set `zend.exception_ignore_args = On` in your application's PHP
+configuration so exception traces cannot include API tokens or signing secrets.
+PHP 8.2+ additionally supports the SDK's `SensitiveParameter` annotations; PHP 8.1
+ignores them. Keep argument capture off in error-monitoring tools on every version.
+
 ## Optional checkout reader and Lightning
 
 ```php
@@ -287,7 +292,8 @@ CLI/PHP and PDO SQLite for the TLS and durable callback examples. Plain HTTP is 
 `new Options(allowInsecureLocalhost: true)` for `localhost`, `127.0.0.1` or `::1`.
 This does not disable HTTPS certificate verification.
 
-The initial release was tested locally on PHP 8.3. A pinned-action PHP 8.2–8.5
+The minimum supported runtime is PHP 8.1. All 13 suites pass on PHP 8.1.34 and
+PHP 8.3.6. A pinned-action PHP 8.1–8.5
 CI template is provided in [ci/github-actions.yml](ci/github-actions.yml).
 Repository maintainers can copy it into `.github/workflows/tests.yml` to enable CI.
 

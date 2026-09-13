@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace WhollyCrypto\Http;
 
 /** @internal A custom transport receives credentials; only use trusted implementations. */
-final readonly class Request implements \JsonSerializable
+final class Request implements \JsonSerializable
 {
+    use \WhollyCrypto\Internal\RejectDynamicProperties;
+
     /** @param array<string, string> $headers */
     public function __construct(
-        public string $method,
-        public string $url,
-        #[\SensitiveParameter] private array $headers,
-        #[\SensitiveParameter] private ?string $body = null,
+        public readonly string $method,
+        public readonly string $url,
+        #[\SensitiveParameter] private readonly array $headers,
+        #[\SensitiveParameter] private readonly ?string $body = null,
     ) {
     }
 

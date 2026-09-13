@@ -14,6 +14,13 @@ scope needed and IP restrictions where appropriate. Never disable TLS checks,
 derive API origins from untrusted requests or use untrusted custom transports.
 Avoid logging remote error bodies and `getApiMessage()` without redaction.
 
+The SDK is compatible with PHP 8.1+. PHP 8.1 no longer receives upstream security
+updates; use a security-maintained PHP build for production. On PHP 8.1, enable
+`zend.exception_ignore_args = On` in PHP configuration to keep credentials and
+payloads out of exception traces. The `SensitiveParameter` annotations only
+redact arguments on PHP 8.2+. Disable argument capture in error-monitoring tools
+on every PHP version. The SDK does not change global PHP configuration.
+
 A successful callback signature is not an exactly-once delivery guarantee.
 Persist deduplication and monotonic invoice sequence/state, then reconcile the
 invoice and stored order through the authenticated merchant API before fulfilment.
