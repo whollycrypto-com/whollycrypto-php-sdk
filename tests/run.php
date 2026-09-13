@@ -1,0 +1,323 @@
+<?php
+
+declare(strict_types=1);
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+use WhollyCrypto\Client;
+use WhollyCrypto\CheckoutClient;
+use WhollyCrypto\Options;
+use WhollyCrypto\Webhook;
+use WhollyCrypto\Exception\ApiException;
+use WhollyCrypto\Exception\InvalidResponseException;
+use WhollyCrypto\Exception\InvalidSignatureException;
+use WhollyCrypto\Exception\TransportException;
+use WhollyCrypto\Http\Request;
+use WhollyCrypto\Http\Response;
+use WhollyCrypto\Http\TransportInterface;
+
+error_reporting(E_ALL);
+set_error_handler(static function (int $number, string $message, string $file, int $line): bool {
+    if (!(error_reporting() & $number)) { return false; }
+    throw new ErrorException($message, 0, $number, $file, $line);
+});
+
+const PROJECT = '11111111-1111-4111-8111-111111111111';
+const STORE = '22222222-2222-4222-8222-222222222222';
+const INVOICE = '33333333-3333-4333-8333-333333333333';
+const ASSET = '44444444-4444-4444-8444-444444444444';
+const TOKEN = 'wc_fixture_not_a_real_credential';
+
+function check(bool $condition, string $message = 'Assertion failed'): void
+{
+    if (!$condition) { throw new RuntimeException($message); }
+}
+
+function same(mixed $expected, mixed $actual, string $message = 'Values differ'): void
+{
+    check($expected === $actual, $message);
+}
+
+function throws(callable $fn, string $class): Throwable
+{
+    try { $fn(); } catch (Throwable $e) {
+        check($e instanceof $class, 'Expected ' . $class . ', got ' . get_class($e) . ': ' . $e->getMessage());
+        return $e;
+    }
+    throw new RuntimeException('Expected ' . $class);
+}
+
+final class FakeTransport implements TransportInterface
+{
+    public array $requests = [];
+    public function __construct(public array $queue = []) {}
+    public function send(#[SensitiveParameter] Request $request, Options $options): Response
+    {
+        $this->requests[] = $request;
+        if ($this->queue === []) { throw new RuntimeException('Unexpected extra HTTP request.'); }
+        $next = array_shift($this->queue);
+        if ($next instanceof Throwable) { throw $next; }
+        return $next;
+    }
+}
+
+function reply(array $body = ['data' => []], int $status = 200, array $headers = []): Response
+{
+    return new Response($status, $headers + ['Content-Type' => 'application/json'], json_encode($body, JSON_THROW_ON_ERROR));
+}
+
+function invokeEndpoint(Client $client, string $id, ?array $body): array
+{
+    return match ($id) {
+        'api-service-root' => $client->serviceInfo(),
+        'api-health' => $client->health(),
+        'reconciliation-list' => $client->listReconciliation(PROJECT, ['status' => 'open', 'page' => 1]),
+        'reconciliation-detail' => $client->getReconciliation(PROJECT, INVOICE),
+        'list-project-payment-assets' => $client->listProjectPaymentAssets(PROJECT),
+        'update-project-payment-asset' => $client->updateProjectPaymentAsset(PROJECT, ASSET, $body),
+        'list-token-candidates' => $client->listTokenCandidates(PROJECT, 'ethereum', ['q' => 'usd', 'limit' => 10]),
+        'register-token-asset' => $client->registerTokenAsset(PROJECT, $body),
+        'discover-custom-dex-pools' => $client->discoverCustomDexPools(PROJECT, 'ethereum', '0x' . str_repeat('1', 40)),
+        'register-custom-token' => $client->registerCustomToken(PROJECT, $body),
+        'list-store-payment-assets' => $client->listStorePaymentAssets(PROJECT, STORE),
+        'update-store-payment-assets' => $client->updateStorePaymentAssets(PROJECT, STORE, $body['assets']),
+        'update-store-confirmation-policy' => $client->updateStoreConfirmationPolicy(PROJECT, STORE, ASSET, $body),
+        'list-project-wallets' => $client->listProjectWallets(PROJECT),
+        'create-invoice' => $client->createInvoice(PROJECT, STORE, $body, 'persistent-order-1042'),
+        'list-invoices' => $client->listInvoices(PROJECT, ['search' => 'order-1042', 'limit' => 50, 'offset' => 0]),
+        'get-invoice' => $client->getInvoice(PROJECT, INVOICE),
+        default => throw new RuntimeException('Public merchant endpoint lacks SDK coverage: ' . $id),
+    };
+}
+
+$tests = [];
+$tests['all 17 public merchant endpoints, methods, bodies, auth and response envelopes'] = static function (): void {
+    $catalog = json_decode(file_get_contents(__DIR__ . '/fixtures/api-v1.json'), true, 512, JSON_THROW_ON_ERROR);
+    same(17, count($catalog['endpoints']));
+    foreach ($catalog['endpoints'] as $endpoint) {
+        $transport = new FakeTransport([reply($endpoint['response'])]);
+        $client = new Client('https://api.example.test/', TOKEN, transport: $transport);
+        $result = invokeEndpoint($client, $endpoint['id'], $endpoint['body']);
+        same($endpoint['response'], $result, $endpoint['id'] . ' response');
+        same(1, count($transport->requests));
+        $request = $transport->requests[0];
+        same($endpoint['method'], $request->method);
+        $path = strtr($endpoint['path'], ['{project_id}' => PROJECT, '{store_id}' => STORE, '{public_id}' => INVOICE, '{asset_id}' => ASSET]);
+        same($path, parse_url($request->url, PHP_URL_PATH), $endpoint['id'] . ' path');
+        same($endpoint['access'] === 'public' ? null : 'Bearer ' . TOKEN, $request->headers()['Authorization'] ?? null);
+        if ($endpoint['body'] === null) {
+            same(null, $request->body());
+        } else {
+            same('application/json', $request->headers()['Content-Type']);
+            check(json_decode($request->body(), true, flags: JSON_THROW_ON_ERROR) == $endpoint['body']);
+        }
+        same($endpoint['id'] === 'create-invoice' ? 'persistent-order-1042' : null, $request->headers()['Idempotency-Key'] ?? null);
+    }
+};
+
+$tests['decimal strings, large numbers, empty objects and deterministic retry bytes'] = static function (): void {
+    $transport = new FakeTransport([new Response(200, ['content-type' => 'application/json'], '{"data":{"amount":"0.000000000000000001","atomic":99999999999999999999999999999999}}'), reply()]);
+    $client = new Client('https://api.example.test', TOKEN, transport: $transport);
+    $one = ['amount' => '0.000000000000000001', 'currency' => 'EUR', 'metadata' => [], 'checkout_appearance' => []];
+    $result = $client->createInvoice(PROJECT, STORE, $one, 'same-key');
+    same('99999999999999999999999999999999', $result['data']['atomic']);
+    same('0.000000000000000001', $result['data']['amount']);
+    $client->createInvoice(PROJECT, STORE, array_reverse($one, true), 'same-key');
+    same($transport->requests[0]->body(), $transport->requests[1]->body());
+    check(str_contains($transport->requests[0]->body(), '"metadata":{}'));
+    check(str_contains($transport->requests[0]->body(), '"checkout_appearance":{}'));
+    foreach ([1, 1.1, '-1', '1e-8', 'NaN', '1,00', ' 1', '+1', '1.'] as $amount) {
+        throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => $amount], 'key'), InvalidArgumentException::class);
+    }
+    throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1', 'exchange_rate_spread_percent' => 1.5], 'key'), InvalidArgumentException::class);
+    throws(fn () => $client->registerCustomToken(PROJECT, ['price_usd' => 1.5]), InvalidArgumentException::class);
+    same(2, count($transport->requests));
+};
+
+$tests['origin, UUID, credential and header injection validation'] = static function (): void {
+    foreach (['http://api.example.test', 'https://user:pass@api.example.test', 'https://api.example.test/v1', 'https://api.example.test?x=1', 'https://api.example.test#x', 'https://api.example.test\\@evil.test', "https://api.example.test\n", 'file:///tmp/key', '//api.example.test', 'https://api.example.test:0'] as $url) {
+        throws(fn () => new Client($url, TOKEN), InvalidArgumentException::class);
+    }
+    throws(fn () => new Client('http://10.0.0.1', TOKEN, new Options(allowInsecureLocalhost: true)), InvalidArgumentException::class);
+    foreach (['', 'Bearer a token', "secret\r\nX-Injected: true"] as $key) {
+        throws(fn () => new Client('https://api.example.test', $key), InvalidArgumentException::class);
+    }
+    $client = new Client('https://api.example.test', TOKEN, transport: new FakeTransport());
+    foreach (['../other', PROJECT . '?x=1', 'project-name', '%2f', ''] as $id) {
+        throws(fn () => $client->getInvoice($id, INVOICE), InvalidArgumentException::class);
+        throws(fn () => $client->getInvoice(PROJECT, $id), InvalidArgumentException::class);
+    }
+    foreach (['', 'a b', "id\r\nx: y", str_repeat('x', 129)] as $key) {
+        throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1'], $key), InvalidArgumentException::class);
+    }
+    throws(fn () => $client->listInvoices(PROJECT, ['search' => ['nested']]), InvalidArgumentException::class);
+    throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1', 'metadata' => ['large' => str_repeat('x', 33000)]], 'key'), InvalidArgumentException::class);
+    throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1', 'metadata' => ['not-an-object']], 'key'), InvalidArgumentException::class);
+    throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1', 'metadata' => ['bad' => "\xff"]], 'key'), InvalidArgumentException::class);
+    throws(fn () => $client->createInvoice(PROJECT, STORE, ['amount' => '1', 'metadata' => ['bad' => new DateTimeImmutable()]], 'key'), InvalidArgumentException::class);
+    same(48, strlen(Client::newIdempotencyKey()));
+    check(Client::newIdempotencyKey() !== Client::newIdempotencyKey());
+};
+
+$tests['status, API errors, malformed/non-JSON failures and rate limits'] = static function (): void {
+    $transport = new FakeTransport([
+        reply(['error' => ['code' => 'rate_limit_exceeded', 'message' => 'Private remote detail ' . TOKEN]], 429, ['Retry-After' => '19', 'X-RateLimit-Limit' => '120', 'X-RateLimit-Remaining' => '0', 'X-RateLimit-Reset' => '1800000060']),
+        new Response(200, ['content-type' => 'text/html'], '<html>Login</html>'),
+        new Response(200, ['content-type' => 'application/json'], '{'),
+        new Response(200, ['content-type' => 'application/json'], '[]'),
+        new Response(403, ['content-type' => 'text/plain'], 'Forbidden'),
+        new Response(503, ['content-type' => 'application/json'], '{'),
+        reply(['data' => []], 200, ['Content-Type' => 'application/problem+json; charset=utf-8']),
+    ]);
+    $client = new Client('https://api.example.test', TOKEN, transport: $transport);
+    $error = throws(fn () => $client->listProjectWallets(PROJECT), ApiException::class);
+    same(429, $error->statusCode); same('rate_limit_exceeded', $error->errorCode); same(19, $error->getRetryAfter());
+    same(['limit' => 120, 'remaining' => 0, 'reset' => 1800000060], $client->lastResponse()->rateLimit());
+    check(!str_contains($error->getMessage(), TOKEN));
+    check(str_contains($error->getApiMessage(), TOKEN)); // Explicit opt-in access, not a log message.
+    for ($i = 0; $i < 3; $i++) { throws(fn () => $client->getInvoice(PROJECT, INVOICE), InvalidResponseException::class); }
+    same(403, throws(fn () => $client->getInvoice(PROJECT, INVOICE), ApiException::class)->statusCode);
+    same(503, throws(fn () => $client->getInvoice(PROJECT, INVOICE), ApiException::class)->statusCode);
+    same(['data' => []], $client->getInvoice(PROJECT, INVOICE));
+    same(20, (new Response(429, ['retry-after' => gmdate('D, d M Y H:i:s \G\M\T', 1800000020)], ''))->retryAfterSeconds(1800000000));
+    same(null, (new Response(429, ['retry-after' => 'tomorrow'], ''))->retryAfterSeconds());
+};
+
+$tests['bounded opt-in retries preserve invoice request identity; other writes never retry'] = static function (): void {
+    $transport = new FakeTransport([reply([], 429, ['Retry-After' => '0']), reply(['data' => ['ok' => true]])]);
+    $client = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 1, maxRetryDelaySeconds: 0), $transport);
+    $result = $client->createInvoice(PROJECT, STORE, ['amount' => '10.00', 'metadata' => ['z' => 1, 'a' => 2]], 'persisted-key');
+    same(true, $result['data']['ok']); same(2, count($transport->requests));
+    same($transport->requests[0], $transport->requests[1], 'Retry must reuse the same immutable request.');
+    foreach (['register-token-asset', 'register-custom-token', 'update-project-payment-asset', 'update-store-payment-assets', 'update-store-confirmation-policy'] as $id) {
+        $fake = new FakeTransport([reply([], 503), reply()]);
+        $c = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 2, maxRetryDelaySeconds: 0), $fake);
+        throws(fn () => invokeEndpoint($c, $id, ['assets' => [], 'enabled' => true]), ApiException::class);
+        same(1, count($fake->requests));
+    }
+    $fake = new FakeTransport([reply([], 429, ['Retry-After' => '60']), reply()]);
+    $c = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 2, maxRetryDelaySeconds: 0), $fake);
+    same(60, throws(fn () => $c->health(), ApiException::class)->getRetryAfter()); same(1, count($fake->requests));
+    $fake = new FakeTransport([reply([], 429, ['Retry-After' => 'unparseable']), reply()]);
+    $c = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 2, maxRetryDelaySeconds: 0), $fake);
+    throws(fn () => $c->health(), ApiException::class); same(1, count($fake->requests));
+    $fake = new FakeTransport([new TransportException('fixture', true), reply()]);
+    $c = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 1, maxRetryDelaySeconds: 0), $fake);
+    $c->health(); same(2, count($fake->requests));
+    $fake = new FakeTransport([new TransportException('TLS rejection', false), reply()]);
+    $c = new Client('https://api.example.test', TOKEN, new Options(maxRetries: 1, maxRetryDelaySeconds: 0), $fake);
+    throws(fn () => $c->health(), TransportException::class); same(1, count($fake->requests));
+};
+
+$tests['lazy invoice pagination and malformed cursor protection'] = static function (): void {
+    $fake = new FakeTransport([
+        reply(['data' => [['public_id' => INVOICE]], 'pagination' => ['offset' => 0, 'limit' => 1, 'has_more' => true]]),
+        reply(['data' => [['public_id' => ASSET]], 'pagination' => ['offset' => 1, 'limit' => 1, 'has_more' => false]]),
+    ]);
+    $c = new Client('https://api.example.test', TOKEN, transport: $fake);
+    $iterator = $c->iterateInvoices(PROJECT, ['limit' => 1, 'status' => 'settled']);
+    same(0, count($fake->requests));
+    same([INVOICE, ASSET], array_column(iterator_to_array($iterator), 'public_id'));
+    parse_str(parse_url($fake->requests[1]->url, PHP_URL_QUERY), $query);
+    same('1', $query['offset']); same('settled', $query['status']);
+    $fake = new FakeTransport([reply(['data' => [], 'pagination' => ['offset' => 0, 'limit' => 50, 'has_more' => true]])]);
+    $c = new Client('https://api.example.test', TOKEN, transport: $fake);
+    throws(fn () => iterator_to_array($c->iterateInvoices(PROJECT)), InvalidResponseException::class);
+};
+
+$tests['public checkout separation, query encoding and redacted debugging'] = static function (): void {
+    $fake = new FakeTransport([reply(), reply(), reply()]);
+    $c = new CheckoutClient('https://pay.example.test', transport: $fake);
+    $c->getInvoice(INVOICE); $c->getPreview(PROJECT, STORE);
+    foreach ($fake->requests as $request) { check(!isset($request->headers()['Authorization'])); }
+    same('https://pay.example.test/invoice/' . INVOICE, $c->invoiceUrl(INVOICE));
+    check(str_contains($c->previewUrl(PROJECT, STORE, 'paid'), 'state=paid'));
+    throws(fn () => $c->previewUrl(PROJECT, STORE, 'settled'), InvalidArgumentException::class);
+    $merchant = new Client('https://api.example.test', TOKEN, transport: $fake);
+    $merchant->listInvoices(PROJECT, ['search' => 'EUR & BTC/+?✓']);
+    parse_str(parse_url($fake->requests[2]->url, PHP_URL_QUERY), $query); same('EUR & BTC/+?✓', $query['search']);
+    ob_start(); var_dump($merchant, $fake->requests[2]); $dump = ob_get_clean();
+    check(!str_contains($dump, TOKEN)); check(!str_contains(json_encode($fake->requests[2]), TOKEN));
+    throws(fn () => serialize($merchant), LogicException::class);
+    throws(fn () => serialize($fake->requests[2]), LogicException::class);
+};
+
+$tests['IPN/webhook exact-byte HMAC, timestamp/replay window and malformed header rejection'] = static function (): void {
+    $secret = 'fixture-signing-secret-not-an-api-token';
+    $body = json_encode(['invoice_id' => INVOICE, 'sequence' => 3, 'status' => 'settled', 'amount' => '12.34', 'currency' => 'EUR'], JSON_THROW_ON_ERROR);
+    $now = 1800000000;
+    $header = 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $body, $secret);
+    check(Webhook::verify($body, $header, $secret, now: $now));
+    check(Webhook::verify($body, $header, $secret, now: $now + 300));
+    foreach ([$now - 301, $now + 301] as $time) { check(!Webhook::verify($body, $header, $secret, now: $time)); }
+    check(!Webhook::verify($body . ' ', $header, $secret, now: $now));
+    check(!Webhook::verify($body, $header, 'different-secret', now: $now));
+    foreach ([null, '', $header . "\n", $header . ',v1=' . str_repeat('a', 64), str_replace('t=', 't=0', $header), 't=999999999999999999999999999999,v1=' . str_repeat('a', 64)] as $bad) {
+        check(!Webhook::verify($body, $bad, $secret, now: $now));
+    }
+    $headers = ['Wholly-Signature' => $header, 'WHOLLY-EVENT-ID' => PROJECT, 'Wholly-Delivery-Id' => STORE];
+    $notification = Webhook::parse($body, $headers, $secret, now: $now);
+    same(INVOICE, $notification->invoiceId()); same('settled', $notification->status()); same(3, $notification->sequence()); same(PROJECT, $notification->eventId);
+    throws(fn () => Webhook::parse($body, $headers + ['wholly-signature' => $header], $secret, now: $now), InvalidSignatureException::class);
+    throws(fn () => Webhook::parse($body, array_replace($headers, ['WHOLLY-EVENT-ID' => 'bad-id']), $secret, now: $now), InvalidSignatureException::class);
+    throws(fn () => Webhook::parse($body, array_replace($headers, ['Wholly-Signature' => [$header]]), $secret, now: $now), InvalidSignatureException::class);
+    foreach (['[]', '{"status":"settled"}', '{"invoice_id":[],"sequence":3,"status":"settled"}', '{"invoice_id":"' . INVOICE . '","sequence":1.1,"status":"settled"}'] as $badBody) {
+        $badHeader = 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $badBody, $secret);
+        throws(fn () => Webhook::parse($badBody, array_replace($headers, ['Wholly-Signature' => $badHeader]), $secret, now: $now), InvalidSignatureException::class);
+    }
+    check(!Webhook::verify(str_repeat('x', 262145), $header, $secret, now: $now));
+};
+
+$tests['real cURL loopback: auth, JSON, public requests, redirects, limits and timeout'] = static function (): void {
+    $directory = sys_get_temp_dir() . '/wholly-php-sdk-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700);
+    $socket = stream_socket_server('tcp://127.0.0.1:0', $errno, $error);
+    check($socket !== false); $address = stream_socket_get_name($socket, false); fclose($socket);
+    $log = $directory . '/requests.jsonl';
+    $env = array_merge(getenv(), ['WHOLLY_FIXTURE_LOG' => $log]);
+    $process = proc_open([PHP_BINARY, '-S', $address, __DIR__ . '/router.php'], [0 => ['pipe', 'r'], 1 => ['file', $directory . '/server.log', 'a'], 2 => ['file', $directory . '/server.log', 'a']], $pipes, __DIR__, $env);
+    check(is_resource($process)); fclose($pipes[0]);
+    try {
+        for ($i = 0; $i < 100; $i++) {
+            $ready = @stream_socket_client('tcp://' . $address, $errno, $error, 0.05);
+            if ($ready) { fclose($ready); break; }
+            usleep(20_000);
+        }
+        check($i < 100, 'Fixture server did not start.');
+        $options = new Options(timeoutSeconds: 3, connectTimeoutSeconds: 1, allowInsecureLocalhost: true);
+        $sharedTransport = new WhollyCrypto\Http\CurlTransport();
+        $c = new Client('http://' . $address, TOKEN, $options, $sharedTransport);
+        $result = $c->createInvoice(PROJECT, STORE, ['amount' => '25.00', 'metadata' => []], 'fixture-stored-key');
+        same('POST', $result['request']['method']); same('Bearer ' . TOKEN, $result['request']['headers']['authorization']);
+        same('fixture-stored-key', $result['request']['headers']['idempotency-key']);
+        same('9999999999999999999999999999', $result['data']['expected_amount_atomic']);
+        $body = json_decode($result['request']['body']); same('25.00', $body->amount); check($body->metadata instanceof stdClass);
+        same(119, $c->lastResponse()->rateLimit()['remaining']);
+        check(!isset($c->health()['request']['headers']['authorization']));
+        $public = (new CheckoutClient('http://' . $address, $options, $sharedTransport))->getInvoice(INVOICE);
+        check(!isset($public['request']['headers']['authorization']));
+        same('GET', $public['request']['method']); same('', $public['request']['body']);
+        same('redirect_not_followed', throws(fn () => $c->listInvoices(PROJECT, ['search' => 'redirect']), ApiException::class)->errorCode);
+        check(!str_contains(file_get_contents($log), '/trap'), 'Redirect must not be followed.');
+        throws(fn () => $c->listInvoices(PROJECT, ['search' => 'html']), InvalidResponseException::class);
+        same(19, throws(fn () => $c->listInvoices(PROJECT, ['search' => 'rate-limit']), ApiException::class)->getRetryAfter());
+        $limited = new Client('http://' . $address, TOKEN, new Options(timeoutSeconds: 3, connectTimeoutSeconds: 1, allowInsecureLocalhost: true, maxResponseBytes: 1024));
+        throws(fn () => $limited->listInvoices(PROJECT, ['search' => 'large']), TransportException::class);
+        $short = new Client('http://' . $address, TOKEN, new Options(timeoutSeconds: 1, connectTimeoutSeconds: 1, allowInsecureLocalhost: true));
+        check(throws(fn () => $short->listInvoices(PROJECT, ['search' => 'timeout']), TransportException::class)->retryable);
+    } finally {
+        proc_terminate($process); proc_close($process);
+        foreach (glob($directory . '/*') as $file) { unlink($file); }
+        rmdir($directory);
+    }
+};
+
+require __DIR__ . '/security-integration.php';
+
+$failed = 0;
+foreach ($tests as $name => $test) {
+    try { $test(); echo 'PASS: ' . $name . "\n"; }
+    catch (Throwable $error) { $failed++; fwrite(STDERR, 'FAIL: ' . $name . ': ' . get_class($error) . ': ' . $error->getMessage() . ' at ' . $error->getFile() . ':' . $error->getLine() . "\n"); }
+}
+echo count($tests) . ' suites; ' . $failed . " failures. No live payments or writes.\n";
+exit($failed ? 1 : 0);

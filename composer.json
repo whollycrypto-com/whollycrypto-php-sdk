@@ -1,0 +1,19 @@
+{
+    "name": "whollycrypto/php-sdk",
+    "description": "Lightweight PHP client for the Wholly Crypto self-hosted merchant API.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["whollycrypto", "crypto", "payments", "bitcoin", "lightning", "merchant", "sdk"],
+    "homepage": "https://www.whollycrypto.com",
+    "support": {
+        "issues": "https://github.com/whollycrypto-com/whollycrypto-php-sdk/issues",
+        "source": "https://github.com/whollycrypto-com/whollycrypto-php-sdk",
+        "docs": "https://github.com/whollycrypto-com/whollycrypto-php-sdk/blob/main/README.md"
+    },
+    "authors": [{"name": "Wholly Crypto", "homepage": "https://www.whollycrypto.com"}],
+    "require": {"php": "^8.2", "ext-curl": "*", "ext-json": "*"},
+    "autoload": {"psr-4": {"WhollyCrypto\\": "src/"}},
+    "scripts": {"test": "@php tests/run.php", "lint": "@php tests/lint.php"},
+    "config": {"sort-packages": true, "allow-plugins": false},
+    "archive": {"exclude": ["/.github", "/ci", "/tests", "/tools", "/.gitignore", "/.gitattributes", "/docs/maintaining.md"]}
+}

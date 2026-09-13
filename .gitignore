@@ -1,0 +1,10 @@
+/vendor/
+/composer.lock
+/.idea/
+/.vscode/
+.env
+.env.*
+auth.json
+*.log
+*.phar
+.DS_Store

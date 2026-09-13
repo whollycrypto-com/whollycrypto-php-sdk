@@ -1,0 +1,298 @@
+# Wholly Crypto PHP SDK
+
+The official PHP client for your **self-hosted Wholly Crypto merchant API**.
+Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
+
+PHP **8.2+**, cURL and JSON. No framework or third-party runtime packages.
+SDK **1.0.0** targets API **v1**, tested against merchant **3.5.0**.
+The SDK and merchant application have independent version numbers.
+
+## Install
+
+```bash
+composer require whollycrypto/php-sdk:^1.0
+```
+
+If you need to install directly from GitHub before Packagist indexes a release:
+
+```bash
+composer config repositories.whollycrypto vcs https://github.com/whollycrypto-com/whollycrypto-php-sdk
+composer require whollycrypto/php-sdk:^1.0
+```
+
+## Create an invoice
+
+Use **your installation's API domain**, not its merchant-console or checkout domain.
+Create a credential under **Settings → API access** and grant it the required
+project access. Invoice creation needs a read/write credential.
+
+Find both UUIDs in **Project → Stores → select store → Basic → API IDs**.
+Copy **Project API ID** and **Store API ID**. The readable project/store identifiers
+are not API UUIDs. Projects and stores are created in the console, not through this API.
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use WhollyCrypto\Client;
+
+$client = new Client('https://api.your-domain.com', getenv('WHOLLY_API_TOKEN'));
+
+// Persist this key AND the invoice payload with your order before the request.
+// Reuse the same key, credential and payload if the response is lost.
+$idempotencyKey = 'order-1042-payment-attempt-1';
+
+$result = $client->createInvoice(
+    '11111111-1111-4111-8111-111111111111', // Your Project API ID
+    '22222222-2222-4222-8222-222222222222', // Your Store API ID
+    [
+        'amount' => '49.90', // Always a string, never a float
+        'currency' => 'EUR',
+        'order_id' => 'order-1042',
+        'email' => 'customer@example.com',
+        'description' => 'Annual plan',
+        'ipn_url' => 'https://your-shop.com/wholly/ipn',
+        'redirect_url' => 'https://your-shop.com/orders/1042',
+        'cancel_url' => 'https://your-shop.com/cart',
+    ],
+    $idempotencyKey,
+);
+
+$publicInvoiceId = $result['data']['public_id'];
+$checkoutUrl = $result['links']['checkout'];
+```
+
+The example UUIDs are placeholders. Return the checkout URL to the customer or
+redirect from your server. Never expose your API token to browser JavaScript,
+HTML, source control or customer checkout URLs. A return/success URL is not proof
+of payment; verify the invoice status on your server.
+
+Every method returns the **complete decoded response**, preserving `data`,
+`links`, `pagination` and other fields. Reconciliation responses have their own
+top-level shape. The SDK does not unwrap, rename or round amounts.
+
+## Check and list payments
+
+```php
+$invoice = $client->getInvoice($projectId, $publicInvoiceId)['data'];
+
+if ($invoice['status'] === 'settled') {
+    // Match your stored order, expected amount/currency and project/store first.
+    // Fulfil once, using a transaction or another durable idempotency mechanism.
+}
+
+$page = $client->listInvoices($projectId, [
+    'store_id' => $storeId,
+    'status' => 'settled',
+    'search' => 'order-1042',
+    'limit' => 50,
+    'offset' => 0,
+]);
+
+foreach ($client->iterateInvoices($projectId, ['status' => 'settled']) as $invoice) {
+    // Lazy pagination: each page is requested when needed.
+}
+```
+
+Invoice paths use **`public_id`**, not the internal `id` or your `order_id`.
+`processing` is not `settled`. Read [the API lifecycle](https://www.whollycrypto.com/api/)
+before implementing fulfilment. List pages are separate snapshots: concurrent
+inserts can shift offsets, so deduplicate by public ID during exports.
+
+## Invoice options and appearance
+
+The invoice payload accepts all current API fields, including customer metadata,
+expiry, callbacks, language, rate spread, underpayment tolerance and checkout appearance.
+Omit optional fields to inherit the store settings. Server-side validation remains authoritative.
+
+```php
+$payload = [
+    'amount' => '25.00',
+    'currency' => 'USD',
+    'exchange_rate_spread_percent' => '0.5',
+    'underpayment_tolerance_percent' => '1',
+    'expires_in_seconds' => 900,
+    'language' => 'de',
+    'metadata' => [
+        'firstname' => 'Ada', 'lastname' => 'Lovelace',
+        'street' => '12 Example Street', 'zip' => '10115',
+        'city' => 'Berlin', 'country' => 'Germany', 'countryiso2' => 'DE',
+        'company' => 'Example GmbH', 'vatid' => 'DE123456789',
+    ],
+    'checkout_appearance' => [
+        'title' => 'Complete your order',
+        'intro' => 'Thanks for choosing us.',
+        'outro' => 'Questions? https://your-shop.com/help',
+        'intro_font_size' => 18,
+        'outro_font_size' => 16,
+        'theme' => 'light',
+        'accent_color' => '#1768CE',
+    ],
+];
+```
+
+Appearance supports structured settings, not arbitrary HTML, JavaScript or CSS.
+`metadata => []` and `checkout_appearance => []` become JSON objects (`{}`).
+An empty appearance object freezes the resolved store design for that invoice;
+omitting it keeps normal store appearance behavior. JSON object keys are sorted
+for deterministic request bytes; list order and decimal strings are preserved.
+
+## All merchant API methods
+
+| Method | Purpose |
+| --- | --- |
+| `serviceInfo()` / `health()` | Public API service and health; no token sent |
+| `createInvoice($projectId, $storeId, $payload, $key)` | Create or replay an invoice |
+| `getInvoice($projectId, $publicId)` | Private invoice detail and current checkout link |
+| `listInvoices($projectId, $filters)` | Searchable, paginated invoices |
+| `iterateInvoices($projectId, $filters)` | Lazy iterator over invoice pages |
+| `listProjectPaymentAssets($projectId)` | Native/token asset policies and readiness |
+| `updateProjectPaymentAsset($projectId, $assetId, $policy)` | Update one project asset policy |
+| `listTokenCandidates($projectId, $chainSlug, $filters)` | Search catalog tokens; filters `q`, `limit` |
+| `registerTokenAsset($projectId, $token)` | Verify and register a catalog token |
+| `discoverCustomDexPools($projectId, $chainSlug, $contract)` | Discover supported DEX pricing candidates |
+| `registerCustomToken($projectId, $token)` | Register a verified custom contract/mint |
+| `listStorePaymentAssets($projectId, $storeId)` | Accepted on-chain methods and separate Lightning readiness |
+| `updateStorePaymentAssets($projectId, $storeId, $assets)` | **Replace** the store's on-chain selection |
+| `updateStoreConfirmationPolicy($projectId, $storeId, $assetId, $policy)` | Inherit or override confirmations |
+| `listProjectWallets($projectId)` | Public addresses and current balances; no private keys |
+| `listReconciliation($projectId, $filters)` | Needs-attention queue; fixed 25 cases per page |
+| `getReconciliation($projectId, $publicId, $page)` | Exception detail and paginated decision history |
+
+For request fields and response schemas, use the [full API reference](https://www.whollycrypto.com/api/)
+or the reference installed on your merchant console. More examples are in [docs/payment-methods.md](docs/payment-methods.md).
+
+`updateStorePaymentAssets()` receives the list itself, not an `assets` wrapper.
+An empty list removes **all on-chain selections**. It does not configure Lightning.
+Refunds, sends, reconciliation decisions, account administration, exchange credentials
+and Lightning setup are console-only; this SDK does not invent public endpoints for them.
+
+## IPN and webhook verification
+
+Both use the same signature format. Use the **IPN or webhook signing secret**
+from the store configuration, not the merchant API token.
+
+```php
+use WhollyCrypto\Webhook;
+use WhollyCrypto\Exception\InvalidSignatureException;
+
+$rawBody = file_get_contents('php://input', false, null, 0, 262145);
+
+try {
+    $notification = Webhook::parse(
+        $rawBody,
+        getallheaders(),
+        getenv('WHOLLY_SIGNING_SECRET'),
+    );
+} catch (InvalidSignatureException $error) {
+    http_response_code(400);
+    exit;
+}
+
+// Durably enqueue before returning 2xx. Do not acknowledge a failed DB write.
+// Use $notification->eventId and invoiceId()/sequence() for replay protection.
+// Re-fetch the invoice through the authenticated client before fulfilment.
+```
+
+Use the **exact raw bytes**, before JSON parsing or middleware transformations.
+Verification uses HMAC-SHA256 and constant-time comparison, with a default
+five-minute past/future clock window. Keep the receiver clock synchronized.
+
+Signatures cover the timestamp and raw body, **not the event/delivery headers**.
+Deduplicate event IDs and also keep invoice sequence/state monotonic; an event ID
+alone is insufficient replay protection. Different events can carry the same
+body and sequence. Event names are not sent in the payload or headers.
+For a durable SQLite queue example, see [examples/webhook.php](examples/webhook.php).
+It additionally needs PDO SQLite and a private writable directory.
+
+## Errors, timeouts and retries
+
+```php
+use WhollyCrypto\Exception\ApiException;
+use WhollyCrypto\Exception\TransportException;
+use WhollyCrypto\Options;
+
+$client = new Client(
+    'https://api.your-domain.com',
+    getenv('WHOLLY_API_TOKEN'),
+    new Options(timeoutSeconds: 20, connectTimeoutSeconds: 5, maxRetries: 1),
+);
+
+try {
+    $invoice = $client->getInvoice($projectId, $publicInvoiceId);
+} catch (ApiException $error) {
+    $status = $error->statusCode;        // e.g. 429
+    $code = $error->errorCode;           // e.g. rate_limit_exceeded
+    $wait = $error->getRetryAfter();     // seconds, or null
+    $detail = $error->getApiMessage();   // Remote detail; may contain customer data
+} catch (TransportException $error) {
+    // A timeout does NOT prove that invoice creation failed.
+    // Retry the original invoice payload with the same stored idempotency key.
+}
+
+$quota = $client->lastResponse()?->rateLimit(); // limit, remaining, reset
+```
+
+Retries are **off by default**. If enabled, only GET requests and invoice creation
+with its explicit idempotency key can retry transient connection failures or
+HTTP 429/502/503/504. Other writes never retry automatically. Retries reuse the
+same encoded body and key. Never change credentials or JSON encoding mid-retry;
+the server binds idempotency to the original credential and exact body bytes.
+
+`Retry-After` is respected with jitter. When it exceeds `maxRetryDelaySeconds`
+(default 60), the SDK throws immediately so your job queue can reschedule;
+it does not retry early. At most three retries can be configured. Timeouts apply
+per attempt, so account for attempts and backoff in your worker's time budget.
+
+TLS certificate verification is always on. Redirects and environment proxies
+are not followed/used, and `.netrc` credentials are ignored. Responses are bounded
+to 8 MiB by default; HTML login pages and malformed JSON are rejected. Configure
+the API origin on your server, never from a customer's request. Custom transports
+receive your API token and must be trusted.
+
+## Optional checkout reader and Lightning
+
+```php
+use WhollyCrypto\CheckoutClient;
+
+$checkout = new CheckoutClient('https://pay.your-domain.com');
+$public = $checkout->getInvoice($publicInvoiceId);
+$url = $checkout->invoiceUrl($publicInvoiceId);
+```
+
+This separate client never holds or sends a merchant API token. It can also read
+`getPreview($projectId, $storeId)` and build `previewUrl(...)`. Preview state is
+illustrative, never proof of payment. QR and image URLs are already returned by
+checkout JSON; use those current URLs rather than reconstructing cached assets.
+
+Keep `payment_rail`, `asset_decimals`, destination tags/memos and `payment_uri`
+intact. Lightning BTC uses **11 atomic decimals (millisatoshis)**; on-chain BTC
+uses 8. A Lightning payment hash is not an on-chain receiving address: use its
+`bolt11`/`payment_uri` and respect `payable`. The SDK never signs or sends funds.
+
+## Development
+
+```bash
+composer install
+composer validate --strict
+composer lint
+composer test
+```
+
+Tests cover all 17 merchant endpoints, mocked responses, exact JSON/amounts,
+idempotency, signatures, pagination and a real loopback cURL fixture. They never
+create live invoices or move funds. Development tests additionally need OpenSSL
+CLI/PHP and PDO SQLite for the TLS and durable callback examples. Plain HTTP is only available with
+`new Options(allowInsecureLocalhost: true)` for `localhost`, `127.0.0.1` or `::1`.
+This does not disable HTTPS certificate verification.
+
+The initial release was tested locally on PHP 8.3. A pinned-action PHP 8.2–8.5
+CI template is provided in [ci/github-actions.yml](ci/github-actions.yml).
+Repository maintainers can copy it into `.github/workflows/tests.yml` to enable CI.
+
+## License
+
+[MIT](LICENSE), for this SDK only. The merchant application and other Wholly Crypto
+software have their own licenses; no server implementation or private service
+code is included here.
