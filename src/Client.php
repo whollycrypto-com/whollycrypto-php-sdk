@@ -8,16 +8,22 @@ use WhollyCrypto\Exception\InvalidResponseException;
 use WhollyCrypto\Http\Response;
 use WhollyCrypto\Http\TransportInterface;
 use WhollyCrypto\Internal\JsonClient;
+use WhollyCrypto\Internal\Compat;
 use WhollyCrypto\Internal\Validation;
 
 /** Merchant API client. Methods preserve the API's complete response envelope. */
 final class Client
 {
-    public const VERSION = '1.0.2';
+    public const VERSION = '1.1.0';
     private JsonClient $http;
 
-    public function __construct(string $baseUrl, #[\SensitiveParameter] string $apiToken, ?Options $options = null, ?TransportInterface $transport = null)
-    {
+    public function __construct(
+        string $baseUrl,
+        #[\SensitiveParameter]
+        string $apiToken,
+        ?Options $options = null,
+        ?TransportInterface $transport = null
+    ) {
         $this->http = new JsonClient($baseUrl, $apiToken, $options, $transport);
     }
 
@@ -29,12 +35,12 @@ final class Client
 
     public function serviceInfo(): array
     {
-        return $this->http->request('GET', '/', authenticated: false);
+        return $this->http->request('GET', '/', [], null, null, false);
     }
 
     public function health(): array
     {
-        return $this->http->request('GET', '/healthz', authenticated: false);
+        return $this->http->request('GET', '/healthz', [], null, null, false);
     }
 
     public function createInvoice(string $projectId, string $storeId, array $invoice, string $idempotencyKey): array
@@ -50,7 +56,7 @@ final class Client
                 $invoice[$field] = Validation::object($invoice[$field]);
             }
         }
-        return $this->http->request('POST', $this->storePath($projectId, $storeId) . '/invoices', data: $invoice, idempotencyKey: $idempotencyKey);
+        return $this->http->request('POST', $this->storePath($projectId, $storeId) . '/invoices', [], $invoice, $idempotencyKey);
     }
 
     /** Filters: store_id, status, search, limit (1–100), offset (0–1,000,000). */
@@ -75,7 +81,7 @@ final class Client
         while (true) {
             $page = $this->listInvoices($projectId, array_replace($filters, ['limit' => $limit, 'offset' => $offset]));
             $pagination = $page['pagination'] ?? null;
-            if (!is_array($page['data'] ?? null) || !array_is_list($page['data'])
+            if (!is_array($page['data'] ?? null) || !Compat::isList($page['data'])
                 || !is_array($pagination) || ($pagination['offset'] ?? null) !== $offset
                 || ($pagination['limit'] ?? null) !== $limit || !is_bool($pagination['has_more'] ?? null)) {
                 throw new InvalidResponseException('Invoice response has invalid pagination metadata.');
@@ -103,7 +109,7 @@ final class Client
 
     public function updateProjectPaymentAsset(string $projectId, string $assetId, array $policy): array
     {
-        return $this->http->request('PUT', $this->projectPath($projectId) . '/payment-assets/' . Validation::uuid($assetId), data: $policy);
+        return $this->http->request('PUT', $this->projectPath($projectId) . '/payment-assets/' . Validation::uuid($assetId), [], $policy);
     }
 
     public function listTokenCandidates(string $projectId, string $chainSlug, array $filters = []): array
@@ -113,7 +119,7 @@ final class Client
 
     public function registerTokenAsset(string $projectId, array $token): array
     {
-        return $this->http->request('POST', $this->projectPath($projectId) . '/payment-token-assets', data: $token);
+        return $this->http->request('POST', $this->projectPath($projectId) . '/payment-token-assets', [], $token);
     }
 
     public function discoverCustomDexPools(string $projectId, string $chainSlug, string $contractAddress): array
@@ -126,7 +132,7 @@ final class Client
         if (isset($token['price_usd'])) {
             Validation::decimal($token['price_usd'], 'price_usd');
         }
-        return $this->http->request('POST', $this->projectPath($projectId) . '/payment-token-assets/custom', data: $token);
+        return $this->http->request('POST', $this->projectPath($projectId) . '/payment-token-assets/custom', [], $token);
     }
 
     /** On-chain selections are in data; separate Lightning readiness is in lightning. */
@@ -138,15 +144,15 @@ final class Client
     /** Replaces the entire accepted on-chain asset list. An empty list removes all. */
     public function updateStorePaymentAssets(string $projectId, string $storeId, array $assets): array
     {
-        if (!array_is_list($assets)) {
+        if (!Compat::isList($assets)) {
             throw new \InvalidArgumentException('assets must be a list of asset_id/display_order objects.');
         }
-        return $this->http->request('PUT', $this->storePath($projectId, $storeId) . '/payment-assets', data: ['assets' => $assets]);
+        return $this->http->request('PUT', $this->storePath($projectId, $storeId) . '/payment-assets', [], ['assets' => $assets]);
     }
 
     public function updateStoreConfirmationPolicy(string $projectId, string $storeId, string $assetId, array $policy): array
     {
-        return $this->http->request('PUT', $this->storePath($projectId, $storeId) . '/payment-assets/' . Validation::uuid($assetId) . '/confirmation-policy', data: $policy);
+        return $this->http->request('PUT', $this->storePath($projectId, $storeId) . '/payment-assets/' . Validation::uuid($assetId) . '/confirmation-policy', [], $policy);
     }
 
     /** Public wallet details and balances only. Never returns keys or recovery phrases. */

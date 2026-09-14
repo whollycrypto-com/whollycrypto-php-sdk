@@ -3,30 +3,33 @@
 The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
-PHP **8.1+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **1.0.2** targets API **v1**, tested against merchant **3.5.0**.
+PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
+SDK **1.1.0** targets API **v1**, tested against merchant **3.5.0**.
 The SDK and merchant application have independent version numbers.
+
+PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
+use a supported PHP 8 release for new deployments.
 
 ## Install
 
 ### With Composer
 
 ```bash
-composer require whollycrypto/php-sdk:^1.0
+composer require whollycrypto/php-sdk:^1.1
 ```
 
 If you need to install directly from GitHub before Packagist indexes a release:
 
 ```bash
 composer config repositories.whollycrypto vcs https://github.com/whollycrypto-com/whollycrypto-php-sdk
-composer require whollycrypto/php-sdk:^1.0
+composer require whollycrypto/php-sdk:^1.1
 ```
 
 Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';`.
 
 ### Without Composer (manual download)
 
-1. [Download SDK 1.0.2 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v1.0.2.zip).
+1. [Download SDK 1.1.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v1.1.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:
@@ -43,7 +46,7 @@ $client = new \WhollyCrypto\Client(
 ```
 
 This assumes `whollycrypto-php-sdk/` is beside your PHP script; adjust the path if
-you keep libraries elsewhere. PHP 8.1+, cURL and JSON are still required.
+you keep libraries elsewhere. PHP 7.4+, cURL and JSON are still required.
 Set `WHOLLY_API_TOKEN` on your server using a credential from **Settings → API access**.
 
 No `use` statement is needed. The exact class name is `\WhollyCrypto\Client`;
@@ -241,7 +244,7 @@ It additionally needs PDO SQLite and a private writable directory.
 $client = new \WhollyCrypto\Client(
     'https://api.your-domain.com',
     getenv('WHOLLY_API_TOKEN'),
-    new \WhollyCrypto\Options(timeoutSeconds: 20, connectTimeoutSeconds: 5, maxRetries: 1),
+    new \WhollyCrypto\Options(20, 5, 1), // Timeout seconds, connection timeout, retries
 );
 
 try {
@@ -256,8 +259,20 @@ try {
     // Retry the original invoice payload with the same stored idempotency key.
 }
 
-$quota = $client->lastResponse()?->rateLimit(); // limit, remaining, reset
+$response = $client->lastResponse();
+$quota = $response !== null ? $response->rateLimit() : null; // limit, remaining, reset
 ```
+
+Examples use positional arguments so they also run on PHP 7.4. Existing PHP 8
+named arguments still work. `Options` parameters, in order: `timeoutSeconds`,
+`connectTimeoutSeconds`, `maxRetries`, `maxRetryDelaySeconds`,
+`allowInsecureLocalhost`, `maxResponseBytes`.
+
+Value properties such as `$options->timeoutSeconds` and `$notification->payload`
+remain read-only views. Create a new object to change settings. Internally these
+use private properties and getters on every PHP version; do not rely on native
+`readonly` reflection or `get_object_vars()` to inspect them. JSON output retains
+the same public fields, and request/response bodies stay behind their explicit getters.
 
 Retries are **off by default**. If enabled, only GET requests and invoice creation
 with its explicit idempotency key can retry transient connection failures or
@@ -276,10 +291,10 @@ to 8 MiB by default; HTML login pages and malformed JSON are rejected. Configure
 the API origin on your server, never from a customer's request. Custom transports
 receive your API token and must be trusted.
 
-On PHP 8.1, set `zend.exception_ignore_args = On` in your application's PHP
+On PHP 7.4–8.1, set `zend.exception_ignore_args = On` in your application's PHP
 configuration so exception traces cannot include API tokens or signing secrets.
-PHP 8.2+ additionally supports the SDK's `SensitiveParameter` annotations; PHP 8.1
-ignores them. Keep argument capture off in error-monitoring tools on every version.
+PHP 8.2+ additionally supports the SDK's `SensitiveParameter` annotations; older
+PHP versions ignore them. Keep argument capture off in error-monitoring tools on every version.
 
 ## Optional checkout reader and Lightning
 
@@ -313,12 +328,14 @@ Tests cover all 17 merchant endpoints, mocked responses, exact JSON/amounts,
 idempotency, signatures, pagination and a real loopback cURL fixture. They never
 create live invoices or move funds. Development tests additionally need OpenSSL
 CLI/PHP and PDO SQLite for the TLS and durable callback examples. Plain HTTP is only available with
-`new \WhollyCrypto\Options(allowInsecureLocalhost: true)` for `localhost`, `127.0.0.1` or `::1`.
+`new \WhollyCrypto\Options(20, 5, 0, 60, true)` for `localhost`, `127.0.0.1` or `::1`.
 This does not disable HTTPS certificate verification.
 
-The minimum supported runtime is PHP 8.1. The suite is tested on PHP 8.1.34 and
-PHP 8.3.6 with both Composer and the standalone loader, including an isolated
-copy with no `vendor/` directory. A pinned-action PHP 8.1–8.5
+The minimum supported runtime is PHP 7.4. All 16 suites pass on PHP 7.4.33,
+PHP 8.1.34 and PHP 8.3.6. The suite covers both Composer and the
+standalone loader, including an isolated copy with no `vendor/` directory,
+read-only values, PHP 8 named arguments and legacy cURL resources.
+A pinned-action PHP 7.4 / 8.0–8.5
 CI template is provided in [ci/github-actions.yml](ci/github-actions.yml).
 Repository maintainers can copy it into `.github/workflows/tests.yml` to enable CI.
 

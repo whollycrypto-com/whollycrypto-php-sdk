@@ -4,16 +4,24 @@ declare(strict_types=1);
 
 namespace WhollyCrypto\Http;
 
-final class Response
+/** @property-read int $statusCode */
+final class Response implements \JsonSerializable
 {
     use \WhollyCrypto\Internal\RejectDynamicProperties;
 
+    private const READABLE_PROPERTIES = ['statusCode'];
+    private int $statusCode;
+    private string $body;
+
     /** @var array<string, string> */
-    private readonly array $headers;
+    private array $headers;
 
     /** @param array<string, string> $headers */
-    public function __construct(public readonly int $statusCode, array $headers, private readonly string $body)
+    public function __construct(int $statusCode, array $headers, string $body)
     {
+        $this->initializeImmutable();
+        $this->statusCode = $statusCode;
+        $this->body = $body;
         $normalized = [];
         foreach ($headers as $name => $value) {
             $normalized[strtolower($name)] = $value;

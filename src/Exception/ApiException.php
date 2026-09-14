@@ -6,14 +6,31 @@ namespace WhollyCrypto\Exception;
 
 use WhollyCrypto\Http\Response;
 
-final class ApiException extends \RuntimeException
+/**
+ * @property-read int $statusCode
+ * @property-read string $errorCode
+ */
+final class ApiException extends \RuntimeException implements \JsonSerializable
 {
+    use \WhollyCrypto\Internal\RejectDynamicProperties;
+
+    private const READABLE_PROPERTIES = ['statusCode', 'errorCode'];
+    private int $statusCode;
+    private string $errorCode;
+    private ?string $apiMessage;
+    private Response $response;
+
     public function __construct(
-        public readonly int $statusCode,
-        public readonly string $errorCode,
-        private readonly ?string $apiMessage,
-        private readonly Response $response,
+        int $statusCode,
+        string $errorCode,
+        ?string $apiMessage,
+        Response $response
     ) {
+        $this->initializeImmutable();
+        $this->statusCode = $statusCode;
+        $this->errorCode = $errorCode;
+        $this->apiMessage = $apiMessage;
+        $this->response = $response;
         // Do not put remote bodies, credentials or customer data into log messages.
         parent::__construct(sprintf('Wholly Crypto API request failed (HTTP %d, %s).', $statusCode, $errorCode));
     }

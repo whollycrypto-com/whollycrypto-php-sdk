@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-09-14
+
+- Support PHP 7.4+ with Composer or the standalone loader, without third-party runtime dependencies.
+- Replace PHP 8-only syntax/helpers and accept both PHP 7 cURL resources and PHP 8 cURL objects.
+- Preserve read-only value access through private storage/getters, reject reinitialization and retain public JSON shapes. Native readonly reflection and get_object_vars are not the property interface.
+- Keep existing PHP 8 named arguments and SensitiveParameter protection; document safe trace settings on older runtimes.
+- Make all examples and tests PHP 7.4-compatible, expand the optional CI matrix and note PHP 7.4's upstream end of security support.
+- No API, amount encoding, idempotency or callback-signature changes. Still targets merchant API v1, tested against merchant 3.5.0.
+
 ## 1.0.2 - 2026-09-14
 
 - Add a standalone `autoload.php` for manual ZIP/Git installations without Composer or a `vendor/` directory.

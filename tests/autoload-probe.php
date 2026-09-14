@@ -5,7 +5,7 @@ declare(strict_types=1);
 // Run in a fresh process, inside an application namespace, with fixture data only.
 namespace WhollyCryptoSdkTests\Storefront;
 
-set_error_handler(static function (int $number, string $message): never {
+set_error_handler(static function (int $number, string $message): void {
     throw new \RuntimeException($message);
 });
 
@@ -19,7 +19,7 @@ if ($mode === 'composer-first') {
     new \WhollyCrypto\Client('https://api.example.test', 'wc_fixture_not_a_real_credential');
 }
 
-$before = count(spl_autoload_functions());
+$before = count(spl_autoload_functions() ?: []);
 require_once $root . '/autoload.php';
 require_once $root . '/autoload.php';
 $loaders = spl_autoload_functions();
@@ -33,7 +33,7 @@ if ($mode === 'manual-first') {
     new \WhollyCrypto\Client('https://api.example.test', 'wc_fixture_not_a_real_credential');
 }
 $checkout = new \WhollyCrypto\CheckoutClient('https://pay.example.test');
-if ($client->lastResponse() !== null || !str_starts_with($checkout->invoiceUrl('33333333-3333-4333-8333-333333333333'), 'https://pay.example.test/')) {
+if ($client->lastResponse() !== null || strpos($checkout->invoiceUrl('33333333-3333-4333-8333-333333333333'), 'https://pay.example.test/') !== 0) {
     throw new \RuntimeException('Direct client construction failed.');
 }
 

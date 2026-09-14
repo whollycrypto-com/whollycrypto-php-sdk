@@ -14,8 +14,13 @@ When a public merchant route, request, response or permission changes:
    Also run `php tests/run.php --manual-autoload` to cover Composer-free loading;
    the suite checks a standalone copy with no `vendor/` directory and coexistence
    with Composer. Keep root `autoload.php` in both Git and Composer archives.
-   Always verify syntax and tests on the minimum PHP 8.1 runtime, not only with
+   Always verify syntax and tests on the minimum PHP 7.4 runtime, not only with
    Composer's emulated platform setting.
+   Keep public examples compatible with PHP 7.4 too. Do not use PHP 8-only named
+   calls, promoted/readonly properties, mixed/never types or global polyfills in
+   shared runtime files. Put SensitiveParameter attributes on their own lines so
+   PHP 7 treats them as comments. Preserve immutable getter views, JSON shapes,
+   PHP 8 constructor parameter names and both cURL resource/object handling.
 5. Review the diff and archive contents, update `Client::VERSION` and changelog,
    then create an immutable semantic-version Git tag and GitHub release.
 6. Verify Packagist sees the version and test a clean `composer require`.

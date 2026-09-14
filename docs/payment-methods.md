@@ -4,7 +4,7 @@ Configure the client as shown in the [README](../README.md). These examples use
 your Project/Store API UUIDs, not their readable identifiers.
 
 Token registration performs live chain checks. For these longer operations use
-`new \WhollyCrypto\Options(timeoutSeconds: 60)` when constructing your client. Your installation's
+`new \WhollyCrypto\Options(60)` when constructing your client. Your installation's
 reverse-proxy timeout must also permit the operation. A timeout can leave the
 registration completed on the server: check the asset list before retrying.
 
@@ -106,7 +106,7 @@ $queue = $client->listReconciliation($projectId, [
     'status' => 'open', 'reason' => 'underpaid', 'page' => 1,
 ]);
 
-$detail = $client->getReconciliation($projectId, $publicInvoiceId, page: 2);
+$detail = $client->getReconciliation($projectId, $publicInvoiceId, 2); // Decision-history page
 ```
 
 `page` in detail selects decision history only. The latest observations,

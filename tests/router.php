@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // Disposable loopback-only HTTP fixture. No live merchant API is contacted.
 if (in_array(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), ['/callbacks', '/callbacks-fail'], true)) {
-    if (str_starts_with($_SERVER['REQUEST_URI'], '/callbacks-fail')) {
+    if (strpos($_SERVER['REQUEST_URI'], '/callbacks-fail') === 0) {
         putenv('WHOLLY_CALLBACK_DB=' . dirname(getenv('WHOLLY_CALLBACK_DB')));
     }
     require dirname(__DIR__) . '/examples/webhook.php';

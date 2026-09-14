@@ -21,17 +21,17 @@ if ($raw === false || strlen($raw) > 262144) {
 try {
     $secret = getenv('WHOLLY_SIGNING_SECRET');
     $database = getenv('WHOLLY_CALLBACK_DB');
-    if (!$secret || !$database || !str_starts_with($database, '/') || !is_dir(dirname($database))) {
+    if (!$secret || !$database || strpos($database, '/') !== 0 || !is_dir(dirname($database))) {
         throw new RuntimeException('Receiver is not configured.');
     }
     $documentRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
     $directory = realpath(dirname($database));
-    if ($documentRoot && ($directory === $documentRoot || str_starts_with($directory, $documentRoot . '/'))) {
+    if ($documentRoot && ($directory === $documentRoot || strpos($directory, $documentRoot . '/') === 0)) {
         throw new RuntimeException('Queue storage must be outside the document root.');
     }
     $notification = \WhollyCrypto\Webhook::parse($raw, getallheaders(), $secret);
     umask(0077);
-    $db = new PDO('sqlite:' . $database, options: [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $db = new PDO('sqlite:' . $database, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=3000');
     $db->exec('CREATE TABLE IF NOT EXISTS wholly_notifications (
         event_id TEXT PRIMARY KEY,
@@ -50,9 +50,9 @@ try {
     $insert->execute([$notification->eventId, $notification->invoiceId(), $notification->sequence(), $notification->deliveryId, $raw, time()]);
     $db->commit();
     http_response_code(204); // Acknowledge only after durable storage or deduplication.
-} catch (\WhollyCrypto\Exception\InvalidSignatureException) {
+} catch (\WhollyCrypto\Exception\InvalidSignatureException $error) {
     http_response_code(400);
-} catch (Throwable) {
+} catch (Throwable $error) {
     // Let Wholly Crypto retry. Never print secrets, payloads or database errors.
     http_response_code(503);
 }

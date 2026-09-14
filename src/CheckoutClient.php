@@ -21,12 +21,12 @@ final class CheckoutClient
 
     public function getInvoice(string $publicInvoiceId): array
     {
-        return $this->http->request('GET', '/checkout-api/invoices/' . Validation::uuid($publicInvoiceId), authenticated: false);
+        return $this->http->request('GET', '/checkout-api/invoices/' . Validation::uuid($publicInvoiceId), [], null, null, false);
     }
 
     public function getPreview(string $projectId, ?string $storeId = null): array
     {
-        return $this->http->request('GET', '/checkout-api/previews/' . Validation::uuid($projectId), $storeId === null ? [] : ['store_id' => Validation::uuid($storeId)], authenticated: false);
+        return $this->http->request('GET', '/checkout-api/previews/' . Validation::uuid($projectId), $storeId === null ? [] : ['store_id' => Validation::uuid($storeId)], null, null, false);
     }
 
     /** Prefer the current links.checkout returned by the merchant API when available. */

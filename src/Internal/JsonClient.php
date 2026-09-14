@@ -21,12 +21,14 @@ final class JsonClient
     private Options $options;
     private TransportInterface $transport;
     private ?Response $lastResponse = null;
+    private ?string $token;
 
     public function __construct(
         string $origin,
-        #[\SensitiveParameter] private ?string $token,
+        #[\SensitiveParameter]
+        ?string $token,
         ?Options $options,
-        ?TransportInterface $transport,
+        ?TransportInterface $transport
     ) {
         $this->options = $options ?? new Options();
         $this->origin = Validation::origin($origin, $this->options);
@@ -34,12 +36,13 @@ final class JsonClient
             throw new \InvalidArgumentException('API token must be nonempty visible ASCII without spaces or newlines.');
         }
         $this->transport = $transport ?? new CurlTransport();
+        $this->token = $token;
     }
 
     public function url(string $path, array $query = []): string
     {
         if (!preg_match('~\A/(?:[a-zA-Z0-9/_-]|\.(?:svg|png))*\z~D', $path)
-            || str_starts_with($path, '//') || str_contains($path, '..')) {
+            || Compat::startsWith($path, '//') || Compat::contains($path, '..')) {
             throw new \InvalidArgumentException('Invalid relative API path.');
         }
         $encoded = Validation::query($query);
@@ -74,7 +77,7 @@ final class JsonClient
         if ($data !== null) {
             try {
                 $body = json_encode(Validation::canonical(Validation::object($data)), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRESERVE_ZERO_FRACTION);
-            } catch (\JsonException) {
+            } catch (\JsonException $error) {
                 throw new \InvalidArgumentException('Request contains an invalid JSON value or invalid UTF-8.');
             }
             if (strlen($body) > 32_768) {
@@ -118,10 +121,10 @@ final class JsonClient
         $contentType = strtolower(explode(';', $response->header('content-type') ?? '')[0]);
         $isJson = $contentType === 'application/json' || preg_match('~\Aapplication/[a-z0-9.+-]+\+json\z~D', $contentType);
         $data = null;
-        if ($isJson && str_starts_with(ltrim($response->body()), '{')) {
+        if ($isJson && Compat::startsWith(ltrim($response->body()), '{')) {
             try {
                 $data = json_decode($response->body(), true, 512, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING);
-            } catch (\JsonException) {
+            } catch (\JsonException $error) {
                 // On errors keep the actual HTTP status, even if a proxy returned bad JSON.
             }
         }
@@ -129,7 +132,7 @@ final class JsonClient
             $error = is_array($data) && is_array($data['error'] ?? null) ? $data['error'] : [];
             $code = is_string($error['code'] ?? null) && preg_match('/\A[a-z][a-z0-9_]{0,100}\z/D', $error['code'])
                 ? $error['code'] : ($response->statusCode >= 300 && $response->statusCode < 400 ? 'redirect_not_followed' : 'http_error');
-            if ($this->token !== null && str_contains($code, $this->token)) {
+            if ($this->token !== null && Compat::contains($code, $this->token)) {
                 $code = 'http_error';
             }
             $message = is_string($error['message'] ?? null) ? substr($error['message'], 0, 4096) : null;

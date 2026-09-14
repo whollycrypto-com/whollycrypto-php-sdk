@@ -6,14 +6,23 @@ namespace WhollyCrypto\Http;
 
 use WhollyCrypto\Exception\TransportException;
 use WhollyCrypto\Options;
+use WhollyCrypto\Internal\Compat;
 
 final class CurlTransport implements TransportInterface
 {
-    private ?\CurlHandle $handle = null;
+    /** @var \CurlHandle|resource|null PHP 7 uses a cURL resource; PHP 8 uses an object. */
+    private $handle = null;
 
-    public function send(#[\SensitiveParameter] Request $request, Options $options): Response
-    {
+    public function send(
+        #[\SensitiveParameter]
+        Request $request,
+        Options $options
+    ): Response {
         $curl = $this->handle ??= curl_init();
+        if ($curl === false) {
+            $this->handle = null;
+            throw new TransportException('Could not initialize the HTTPS transport.');
+        }
         $body = '';
         $headers = [];
         $headerBytes = 0;
@@ -49,9 +58,9 @@ final class CurlTransport implements TransportInterface
                         $tooLarge = true;
                         return 0;
                     }
-                    if (str_starts_with($line, 'HTTP/')) {
+                    if (Compat::startsWith($line, 'HTTP/')) {
                         $headers = []; // Ignore headers from interim 100/103 responses.
-                    } elseif (str_contains($line, ':')) {
+                    } elseif (Compat::contains($line, ':')) {
                         [$key, $value] = explode(':', $line, 2);
                         $headers[strtolower(trim($key))] = trim($value);
                     }

@@ -4,18 +4,35 @@ declare(strict_types=1);
 
 namespace WhollyCrypto\Http;
 
-/** @internal A custom transport receives credentials; only use trusted implementations. */
+/**
+ * @internal A custom transport receives credentials; only use trusted implementations.
+ * @property-read string $method
+ * @property-read string $url
+ */
 final class Request implements \JsonSerializable
 {
     use \WhollyCrypto\Internal\RejectDynamicProperties;
 
+    private const READABLE_PROPERTIES = ['method', 'url'];
+    private string $method;
+    private string $url;
+    private array $headers;
+    private ?string $body;
+
     /** @param array<string, string> $headers */
     public function __construct(
-        public readonly string $method,
-        public readonly string $url,
-        #[\SensitiveParameter] private readonly array $headers,
-        #[\SensitiveParameter] private readonly ?string $body = null,
+        string $method,
+        string $url,
+        #[\SensitiveParameter]
+        array $headers,
+        #[\SensitiveParameter]
+        ?string $body = null
     ) {
+        $this->initializeImmutable();
+        $this->method = $method;
+        $this->url = $url;
+        $this->headers = $headers;
+        $this->body = $body;
     }
 
     /** @return array<string, string> */

@@ -8,5 +8,9 @@ use WhollyCrypto\Options;
 
 interface TransportInterface
 {
-    public function send(#[\SensitiveParameter] Request $request, Options $options): Response;
+    public function send(
+        #[\SensitiveParameter]
+        Request $request,
+        Options $options
+    ): Response;
 }

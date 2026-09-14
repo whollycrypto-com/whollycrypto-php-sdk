@@ -36,7 +36,8 @@ final class Validation
         return strtolower($value);
     }
 
-    public static function decimal(mixed $value, string $field): void
+    /** @param mixed $value */
+    public static function decimal($value, string $field): void
     {
         if (!is_string($value) || !preg_match('/\A[0-9]{1,48}(?:\.[0-9]{1,30})?\z/D', $value)) {
             throw new \InvalidArgumentException($field . ' must be a plain unsigned decimal string. Never use floats for money.');
@@ -45,19 +46,23 @@ final class Validation
 
     public static function object(array $value): \stdClass
     {
-        if ($value !== [] && array_is_list($value)) {
+        if ($value !== [] && Compat::isList($value)) {
             throw new \InvalidArgumentException('Expected an associative JSON object, not a list.');
         }
         return (object) $value;
     }
 
-    /** Stable object ordering; list order, decimal strings and nulls remain intact. */
-    public static function canonical(mixed $value, int $depth = 0): mixed
+    /**
+     * Stable object ordering; list order, decimal strings and nulls remain intact.
+     * @param mixed $value
+     * @return mixed
+     */
+    public static function canonical($value, int $depth = 0)
     {
         if ($depth > 32) {
             throw new \InvalidArgumentException('JSON request nesting is too deep.');
         }
-        if ($value instanceof \stdClass || (is_array($value) && !array_is_list($value))) {
+        if ($value instanceof \stdClass || (is_array($value) && !Compat::isList($value))) {
             $fields = (array) $value;
             ksort($fields, SORT_STRING);
             foreach ($fields as $key => $child) {

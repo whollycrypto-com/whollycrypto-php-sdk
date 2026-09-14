@@ -4,13 +4,27 @@ declare(strict_types=1);
 
 namespace WhollyCrypto;
 
-final class Notification
+/**
+ * @property-read string $eventId
+ * @property-read string $deliveryId
+ * @property-read array<string, mixed> $payload
+ */
+final class Notification implements \JsonSerializable
 {
     use Internal\RejectDynamicProperties;
 
+    private const READABLE_PROPERTIES = ['eventId', 'deliveryId', 'payload'];
+    private string $eventId;
+    private string $deliveryId;
+    private array $payload;
+
     /** @param array<string, mixed> $payload */
-    public function __construct(public readonly string $eventId, public readonly string $deliveryId, public readonly array $payload)
+    public function __construct(string $eventId, string $deliveryId, array $payload)
     {
+        $this->initializeImmutable();
+        $this->eventId = $eventId;
+        $this->deliveryId = $deliveryId;
+        $this->payload = $payload;
     }
 
     public function invoiceId(): string

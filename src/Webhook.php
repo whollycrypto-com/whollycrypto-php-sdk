@@ -10,8 +10,14 @@ use WhollyCrypto\Internal\Validation;
 /** Same signature protocol for per-invoice/store IPN and event webhooks. */
 final class Webhook
 {
-    public static function verify(string $rawBody, ?string $signature, #[\SensitiveParameter] string $signingSecret, int $toleranceSeconds = 300, ?int $now = null): bool
-    {
+    public static function verify(
+        string $rawBody,
+        ?string $signature,
+        #[\SensitiveParameter]
+        string $signingSecret,
+        int $toleranceSeconds = 300,
+        ?int $now = null
+    ): bool {
         if ($signingSecret === '' || $toleranceSeconds < 0 || $toleranceSeconds > 86_400) {
             throw new \InvalidArgumentException('Use a nonempty signing secret and a 0–86400 second clock tolerance.');
         }
@@ -33,8 +39,14 @@ final class Webhook
      *
      * @param array<string, string> $headers e.g. getallheaders(); not $_SERVER keys
      */
-    public static function parse(string $rawBody, array $headers, #[\SensitiveParameter] string $signingSecret, int $toleranceSeconds = 300, ?int $now = null): Notification
-    {
+    public static function parse(
+        string $rawBody,
+        array $headers,
+        #[\SensitiveParameter]
+        string $signingSecret,
+        int $toleranceSeconds = 300,
+        ?int $now = null
+    ): Notification {
         $normalized = [];
         foreach ($headers as $name => $value) {
             if (!is_string($name) || !is_string($value)) {
@@ -59,7 +71,7 @@ final class Webhook
                 throw new \InvalidArgumentException('Invalid payload.');
             }
             Validation::uuid($payload['invoice_id']);
-        } catch (\JsonException | \InvalidArgumentException) {
+        } catch (\JsonException | \InvalidArgumentException $error) {
             throw new InvalidSignatureException('Signed notification has invalid identifiers or payload.');
         }
         return new Notification($eventId, $deliveryId, $payload);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use WhollyCrypto\Client;
 use WhollyCrypto\Options;
 use WhollyCrypto\Exception\TransportException;
+use WhollyCrypto\Internal\Compat;
 
 $tests['HTTPS rejects an untrusted certificate without any insecure fallback'] = static function (): void {
     $directory = sys_get_temp_dir() . '/wholly-php-tls-' . bin2hex(random_bytes(8));
@@ -27,9 +28,9 @@ $tests['HTTPS rejects an untrusted certificate without any insecure fallback'] =
             usleep(20_000);
         }
         check($i < 100);
-        $client = new Client('https://' . $address, TOKEN, new Options(timeoutSeconds: 3, connectTimeoutSeconds: 1, allowInsecureLocalhost: true));
+        $client = new Client('https://' . $address, TOKEN, new Options(3, 1, 0, 60, true));
         $error = throws(fn () => $client->getInvoice(PROJECT, INVOICE), TransportException::class);
-        check(str_contains($error->getMessage(), 'cURL 60'), 'TLS certificate must be verified, even with the localhost test option.');
+        check(Compat::contains($error->getMessage(), 'cURL 60'), 'TLS certificate must be verified, even with the localhost test option.');
         check(!$error->retryable);
     } finally {
         if (is_resource($process)) { proc_terminate($process); proc_close($process); }

@@ -11,7 +11,7 @@
         "docs": "https://github.com/whollycrypto-com/whollycrypto-php-sdk/blob/main/README.md"
     },
     "authors": [{"name": "Wholly Crypto", "homepage": "https://www.whollycrypto.com"}],
-    "require": {"php": "^8.1", "ext-curl": "*", "ext-json": "*"},
+    "require": {"php": "^7.4 || ^8.0", "ext-curl": "*", "ext-json": "*"},
     "autoload": {"psr-4": {"WhollyCrypto\\": "src/"}},
     "scripts": {"test": "@php tests/run.php", "lint": "@php tests/lint.php"},
     "config": {"sort-packages": true, "allow-plugins": false},
