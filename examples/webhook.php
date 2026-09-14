@@ -14,6 +14,17 @@ declare(strict_types=1);
 // Works directly from the extracted SDK ZIP; no Composer or vendor/ required.
 require_once dirname(__DIR__) . '/autoload.php';
 
+// Multiple event types share an invoice revision. Compare invoice state, not
+// event IDs, delivery metadata, advisory rates or JSON whitespace/key ordering.
+function whollyInvoiceState(array $payload): array
+{
+    $state = [];
+    foreach (['invoice_id', 'status', 'amount_status', 'timing_status', 'resolution', 'sequence', 'amount', 'currency', 'order_id'] as $field) {
+        $state[$field] = $field === 'sequence' ? (string) ($payload[$field] ?? '') : ($payload[$field] ?? null);
+    }
+    return $state;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Allow: POST'); http_response_code(405); exit;
 }
@@ -38,6 +49,9 @@ try {
         throw new RuntimeException('Queue storage must be outside the document root.');
     }
     $notification = \WhollyCrypto\Webhook::parse($raw, getallheaders(), $secret);
+    if (isset($notification->payload['project_id']) && strtolower($notification->payload['project_id']) !== $project) {
+        http_response_code(400); exit; // A valid signature is not permission to cross project scope.
+    }
     umask(0077);
     $db = new PDO('sqlite:' . $database, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=3000');
@@ -60,7 +74,9 @@ try {
     $insert->execute([$project, $notification->eventId, $notification->invoiceId(), $notification->sequence(), $notification->deliveryId, $raw, time()]);
     $existing = $db->prepare('SELECT payload FROM wholly_callback_inbox WHERE project_id=? AND invoice_id=? AND sequence=?');
     $existing->execute([$project, $notification->invoiceId(), $notification->sequence()]);
-    if ($existing->fetchColumn() !== $raw) {
+    $saved = $existing->fetchColumn();
+    $savedPayload = is_string($saved) ? json_decode($saved, true, 32, JSON_THROW_ON_ERROR | JSON_BIGINT_AS_STRING) : null;
+    if (!is_array($savedPayload) || whollyInvoiceState($savedPayload) !== whollyInvoiceState($notification->payload)) {
         $db->rollBack();
         http_response_code(409); exit; // Conflicting signed snapshot needs review.
     }

@@ -71,6 +71,17 @@ final class Webhook
                 throw new \InvalidArgumentException('Invalid payload.');
             }
             Validation::uuid($payload['invoice_id']);
+            if (array_key_exists('payload_version', $payload)) {
+                if ($payload['payload_version'] !== 2
+                    || !is_string($payload['event_id'] ?? null) || !is_string($payload['project_id'] ?? null) || !is_string($payload['store_id'] ?? null)
+                    || Validation::uuid($payload['event_id'] ?? '') !== $eventId
+                    || !in_array($payload['event_type'] ?? null, ['invoice.created', 'payment.received', 'invoice.processing', 'invoice.settled', 'invoice.expired', 'invoice.invalid', 'invoice.cancelled'], true)) {
+                    throw new \InvalidArgumentException('Invalid versioned event.');
+                }
+                Validation::uuid($payload['project_id'] ?? '');
+                Validation::uuid($payload['store_id'] ?? '');
+                $eventId = Validation::uuid($payload['event_id']); // Authenticated body identity, not a transport header.
+            }
         } catch (\JsonException | \InvalidArgumentException $error) {
             throw new InvalidSignatureException('Signed notification has invalid identifiers or payload.');
         }

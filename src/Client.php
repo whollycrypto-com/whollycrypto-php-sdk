@@ -14,7 +14,7 @@ use WhollyCrypto\Internal\Validation;
 /** Merchant API client. Methods preserve the API's complete response envelope. */
 final class Client
 {
-    public const VERSION = '2.0.0';
+    public const VERSION = '2.1.0';
     private JsonClient $http;
 
     public function __construct(
@@ -68,6 +68,12 @@ final class Client
     public function getInvoice(string $projectId, string $publicInvoiceId): array
     {
         return $this->http->request('GET', $this->projectPath($projectId) . '/invoices/' . Validation::uuid($publicInvoiceId));
+    }
+
+    /** Current observations; filters: payment_method_id, limit (1–100), offset (0–1,000,000). */
+    public function listInvoicePayments(string $projectId, string $invoiceId, array $filters = []): array
+    {
+        return $this->http->request('GET', $this->projectPath($projectId) . '/invoices/' . Validation::uuid($invoiceId) . '/payments', $filters);
     }
 
     /** Lazy pagination. Pages are separate snapshots; use a durable ID to deduplicate. */

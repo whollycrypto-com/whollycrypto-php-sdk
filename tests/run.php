@@ -91,6 +91,7 @@ function invokeEndpoint(Client $client, string $id, ?array $body): array
         case 'create-invoice': return $client->createInvoice(PROJECT, STORE, $body, 'persistent-order-1042');
         case 'list-invoices': return $client->listInvoices(PROJECT, ['search' => 'order-1042', 'limit' => 50, 'offset' => 0]);
         case 'get-invoice': return $client->getInvoice(PROJECT, INVOICE);
+        case 'list-invoice-payments': return $client->listInvoicePayments(PROJECT, INVOICE, ['limit' => 25, 'offset' => 0]);
         default: throw new RuntimeException('Public merchant endpoint lacks SDK coverage: ' . $id);
     }
 }
@@ -259,9 +260,9 @@ $tests['argument-free exception traces protect credentials on PHP 7.4 and newer'
     }
 };
 
-$tests['all 17 public merchant endpoints, methods, bodies, auth and response envelopes'] = static function (): void {
+$tests['all 18 public merchant endpoints, methods, bodies, auth and response envelopes'] = static function (): void {
     $catalog = json_decode(file_get_contents(__DIR__ . '/fixtures/api-v1.json'), true, 512, JSON_THROW_ON_ERROR);
-    same(17, count($catalog['endpoints']));
+    same(18, count($catalog['endpoints']));
     foreach ($catalog['endpoints'] as $endpoint) {
         $transport = new FakeTransport([reply($endpoint['response'])]);
         $client = new Client('https://api.example.test/', TOKEN, null, $transport);
@@ -484,13 +485,14 @@ require __DIR__ . '/security-integration.php';
 
 $tests['documented callback snapshot verifies for every invoice status'] = static function (): void {
     $example = json_decode(file_get_contents(dirname(__DIR__) . '/examples/notification.json'), true, 512, JSON_THROW_ON_ERROR);
-    same(9, count($example)); same('49.9', $example['amount']); same('EUR', $example['currency']);
+    same(2, $example['payload_version']); same('49.9', $example['amount']); same('EUR', $example['currency']);
     foreach (['new', 'processing', 'settled', 'expired', 'invalid', 'cancelled'] as $status) {
         $example['status'] = $status;
         $raw = json_encode($example, JSON_THROW_ON_ERROR); $stamp = time();
         $secret = 'only-an-example-test-secret';
-        $headers = ['Wholly-Signature' => 't=' . $stamp . ',v1=' . hash_hmac('sha256', $stamp . '.' . $raw, $secret), 'Wholly-Event-Id' => PROJECT, 'Wholly-Delivery-Id' => STORE];
+        $headers = ['Wholly-Signature' => 't=' . $stamp . ',v1=' . hash_hmac('sha256', $stamp . '.' . $raw, $secret), 'Wholly-Event-Id' => $example['event_id'], 'Wholly-Delivery-Id' => STORE];
         same($status, Webhook::parse($raw, $headers, $secret)->status());
+        throws(fn () => Webhook::parse($raw, array_replace($headers, ['Wholly-Event-Id' => PROJECT]), $secret), InvalidSignatureException::class);
         throws(fn () => Webhook::parse($raw, $headers, 'another-endpoint-secret'), InvalidSignatureException::class);
     }
 };

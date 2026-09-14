@@ -79,7 +79,16 @@ $tests['durable receiver example verifies signatures, deduplicates and does not 
         $otherSignature = 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $other, $secret);
         same(204, $post('/callbacks', $other, $otherSignature)); // Same unsigned event ID must not suppress a different signed invoice.
         same(2, (int) $db->query('SELECT COUNT(*) FROM wholly_callback_inbox')->fetchColumn());
-        $conflict = $raw . ' ';
+        $spaced = $raw . ' ';
+        same(204, $post('/callbacks', $spaced, 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $spaced, $secret)));
+        $base = json_decode($raw, true);
+        foreach (['payment.received' => ASSET, 'invoice.settled' => STORE] as $eventType => $id) {
+            $rich = json_encode(array_replace($base, ['payload_version' => 2, 'project_id' => PROJECT, 'store_id' => STORE, 'event_id' => $id, 'event_type' => $eventType, 'payment_info' => ['method_count' => 1]]), JSON_THROW_ON_ERROR);
+            same(204, $post('/callbacks', $rich, 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $rich, $secret), $id));
+        }
+        $wrongScope = json_encode(array_replace($base, ['payload_version' => 2, 'project_id' => ASSET, 'store_id' => STORE, 'event_id' => PROJECT, 'event_type' => 'invoice.settled']), JSON_THROW_ON_ERROR);
+        same(400, $post('/callbacks', $wrongScope, 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $wrongScope, $secret)));
+        $conflict = str_replace('settled', 'invalid', $raw);
         same(409, $post('/callbacks', $conflict, 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $conflict, $secret)));
         same(0600, fileperms($database) & 0777);
         same(400, $post('/callbacks', $raw . ' ', $signature));

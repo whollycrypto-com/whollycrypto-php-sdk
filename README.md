@@ -6,7 +6,7 @@ The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **2.0.0** targets API **v1**, tested against merchant **4.0.0**.
+SDK **2.1.0** targets API **v1**, tested against merchant **4.1.0**.
 The SDK and merchant application have independent version numbers.
 
 PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
@@ -31,7 +31,7 @@ Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';
 
 ### Without Composer (manual download)
 
-1. [Download SDK 2.0.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.0.0.zip).
+1. [Download SDK 2.1.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.1.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:
@@ -251,9 +251,14 @@ Verification uses HMAC-SHA256 and constant-time comparison, with a default
 five-minute past/future clock window. Keep the receiver clock synchronized.
 
 Signatures cover the timestamp and raw body, **not the event/delivery headers**.
-Deduplicate event IDs and also keep invoice sequence/state monotonic; an event ID
-alone is insufficient replay protection. Different events can carry the same
-body and sequence. Event names are not sent in the payload or headers.
+Version 2 signs `event_id`, `event_type`, `project_id` and `store_id` in the body.
+Legacy events keep their old format. Match receiver scope and keep invoice state
+monotonic. Different event types can share a revision: compare the original nine
+invoice-state fields, not the entire body, when deduplicating by invoice/sequence.
+`payment_info` includes chain/token amounts, remaining funds, confirmations,
+locked quote/spread/tolerance, advisory market rates and bounded transfer history.
+Use `listInvoicePayments($projectId, $invoiceId, ['limit' => 25, 'offset' => 0])`
+for complete current observations. Metadata and customer fields stay private.
 For a durable SQLite queue example, see [examples/webhook.php](examples/webhook.php).
 It additionally needs PDO SQLite and a private writable directory.
 
@@ -343,7 +348,7 @@ composer test
 php tests/run.php --manual-autoload
 ```
 
-Tests cover all 17 merchant endpoints, mocked responses, exact JSON/amounts,
+Tests cover all 18 merchant endpoints, mocked responses, exact JSON/amounts,
 idempotency, signatures, pagination and a real loopback cURL fixture. They never
 create live invoices or move funds. Development tests additionally need OpenSSL
 CLI/PHP and PDO SQLite for the TLS and durable callback examples. Plain HTTP is only available with
