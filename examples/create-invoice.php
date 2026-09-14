@@ -29,4 +29,4 @@ $result = $client->createInvoice(
     ['amount' => '10.00', 'currency' => 'EUR', 'order_id' => 'sdk-example-order'],
     requiredEnvironment('WHOLLY_IDEMPOTENCY_KEY'),
 );
-echo json_encode(['public_id' => $result['data']['public_id'], 'checkout' => $result['links']['checkout']], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . "\n";
+echo json_encode(['invoice_id' => $result['data']['invoice_id'], 'checkout' => $result['links']['checkout']], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . "\n";

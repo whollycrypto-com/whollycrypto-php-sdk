@@ -1,10 +1,12 @@
 # Wholly Crypto PHP SDK
 
+**Merchant 4 upgrade:** read `data.invoice_id` from invoice creation/detail and `invoice_id` from list rows. It matches the callback `invoice_id`. The server no longer returns `public_id`; internal `id` is not a checkout ID. Update custom response readers before upgrading your merchant. For older merchants, keep SDK 1.x or explicitly handle their older response shape.
+
 The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **1.1.0** targets API **v1**, tested against merchant **3.5.0**.
+SDK **2.0.0** targets API **v1**, tested against merchant **4.0.0**.
 The SDK and merchant application have independent version numbers.
 
 PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
@@ -15,21 +17,21 @@ use a supported PHP 8 release for new deployments.
 ### With Composer
 
 ```bash
-composer require whollycrypto/php-sdk:^1.1
+composer require whollycrypto/php-sdk:^2.0
 ```
 
 If you need to install directly from GitHub before Packagist indexes a release:
 
 ```bash
 composer config repositories.whollycrypto vcs https://github.com/whollycrypto-com/whollycrypto-php-sdk
-composer require whollycrypto/php-sdk:^1.1
+composer require whollycrypto/php-sdk:^2.0
 ```
 
 Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';`.
 
 ### Without Composer (manual download)
 
-1. [Download SDK 1.1.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v1.1.0.zip).
+1. [Download SDK 2.0.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.0.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:
@@ -91,7 +93,7 @@ $result = $client->createInvoice(
     $idempotencyKey,
 );
 
-$publicInvoiceId = $result['data']['public_id'];
+$publicInvoiceId = $result['data']['invoice_id'];
 $checkoutUrl = $result['links']['checkout'];
 ```
 
@@ -130,7 +132,7 @@ foreach ($client->iterateInvoices($projectId, ['status' => 'settled']) as $invoi
 }
 ```
 
-Invoice paths use **`public_id`**, not the internal `id` or your `order_id`.
+Invoice paths use **`invoice_id`**, not the internal `id` or your `order_id`.
 `processing` is not `settled`. Read [the API lifecycle](https://www.whollycrypto.com/api/)
 before implementing fulfilment. List pages are separate snapshots: concurrent
 inserts can shift offsets, so deduplicate by public ID during exports.

@@ -270,7 +270,7 @@ $tests['all 17 public merchant endpoints, methods, bodies, auth and response env
         same(1, count($transport->requests));
         $request = $transport->requests[0];
         same($endpoint['method'], $request->method);
-        $path = strtr($endpoint['path'], ['{project_id}' => PROJECT, '{store_id}' => STORE, '{public_id}' => INVOICE, '{asset_id}' => ASSET]);
+        $path = strtr($endpoint['path'], ['{project_id}' => PROJECT, '{store_id}' => STORE, '{invoice_id}' => INVOICE, '{asset_id}' => ASSET]);
         same($path, parse_url($request->url, PHP_URL_PATH), $endpoint['id'] . ' path');
         same($endpoint['access'] === 'public' ? null : 'Bearer ' . TOKEN, $request->headers()['Authorization'] ?? null);
         if ($endpoint['body'] === null) {
@@ -379,13 +379,13 @@ $tests['bounded opt-in retries preserve invoice request identity; other writes n
 
 $tests['lazy invoice pagination and malformed cursor protection'] = static function (): void {
     $fake = new FakeTransport([
-        reply(['data' => [['public_id' => INVOICE]], 'pagination' => ['offset' => 0, 'limit' => 1, 'has_more' => true]]),
-        reply(['data' => [['public_id' => ASSET]], 'pagination' => ['offset' => 1, 'limit' => 1, 'has_more' => false]]),
+        reply(['data' => [['invoice_id' => INVOICE]], 'pagination' => ['offset' => 0, 'limit' => 1, 'has_more' => true]]),
+        reply(['data' => [['invoice_id' => ASSET]], 'pagination' => ['offset' => 1, 'limit' => 1, 'has_more' => false]]),
     ]);
     $c = new Client('https://api.example.test', TOKEN, null, $fake);
     $iterator = $c->iterateInvoices(PROJECT, ['limit' => 1, 'status' => 'settled']);
     same(0, count($fake->requests));
-    same([INVOICE, ASSET], array_column(iterator_to_array($iterator), 'public_id'));
+    same([INVOICE, ASSET], array_column(iterator_to_array($iterator), 'invoice_id'));
     parse_str(parse_url($fake->requests[1]->url, PHP_URL_QUERY), $query);
     same('1', $query['offset']); same('settled', $query['status']);
     $fake = new FakeTransport([reply(['data' => [], 'pagination' => ['offset' => 0, 'limit' => 50, 'has_more' => true]])]);
