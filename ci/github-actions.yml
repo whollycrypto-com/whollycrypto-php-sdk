@@ -34,3 +34,4 @@ jobs:
       - run: composer validate --strict
       - run: composer lint
       - run: composer test
+      - run: php tests/run.php --manual-autoload

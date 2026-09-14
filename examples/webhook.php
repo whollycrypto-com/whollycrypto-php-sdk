@@ -8,10 +8,8 @@ declare(strict_types=1);
 // Keep that directory outside the web root and writable only by the app user.
 // A separate worker MUST process the queue, fetch the authenticated invoice,
 // match its expected order/project/store/amount/currency and fulfil once.
-require dirname(__DIR__) . '/vendor/autoload.php';
-
-use WhollyCrypto\Webhook;
-use WhollyCrypto\Exception\InvalidSignatureException;
+// Works directly from the extracted SDK ZIP; no Composer or vendor/ required.
+require_once dirname(__DIR__) . '/autoload.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     header('Allow: POST'); http_response_code(405); exit;
@@ -31,7 +29,7 @@ try {
     if ($documentRoot && ($directory === $documentRoot || str_starts_with($directory, $documentRoot . '/'))) {
         throw new RuntimeException('Queue storage must be outside the document root.');
     }
-    $notification = Webhook::parse($raw, getallheaders(), $secret);
+    $notification = \WhollyCrypto\Webhook::parse($raw, getallheaders(), $secret);
     umask(0077);
     $db = new PDO('sqlite:' . $database, options: [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $db->exec('PRAGMA busy_timeout=3000');
@@ -52,7 +50,7 @@ try {
     $insert->execute([$notification->eventId, $notification->invoiceId(), $notification->sequence(), $notification->deliveryId, $raw, time()]);
     $db->commit();
     http_response_code(204); // Acknowledge only after durable storage or deduplication.
-} catch (InvalidSignatureException) {
+} catch (\WhollyCrypto\Exception\InvalidSignatureException) {
     http_response_code(400);
 } catch (Throwable) {
     // Let Wholly Crypto retry. Never print secrets, payloads or database errors.

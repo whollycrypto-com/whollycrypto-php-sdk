@@ -4,10 +4,12 @@ The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **8.1+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **1.0.1** targets API **v1**, tested against merchant **3.5.0**.
+SDK **1.0.2** targets API **v1**, tested against merchant **3.5.0**.
 The SDK and merchant application have independent version numbers.
 
 ## Install
+
+### With Composer
 
 ```bash
 composer require whollycrypto/php-sdk:^1.0
@@ -19,6 +21,34 @@ If you need to install directly from GitHub before Packagist indexes a release:
 composer config repositories.whollycrypto vcs https://github.com/whollycrypto-com/whollycrypto-php-sdk
 composer require whollycrypto/php-sdk:^1.0
 ```
+
+Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';`.
+
+### Without Composer (manual download)
+
+1. [Download SDK 1.0.2 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v1.0.2.zip).
+2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
+   Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
+3. Load the SDK and create the client directly:
+
+```php
+<?php
+
+require_once __DIR__ . '/whollycrypto-php-sdk/autoload.php';
+
+$client = new \WhollyCrypto\Client(
+    'https://api.your-domain.com',
+    getenv('WHOLLY_API_TOKEN'),
+);
+```
+
+This assumes `whollycrypto-php-sdk/` is beside your PHP script; adjust the path if
+you keep libraries elsewhere. PHP 8.1+, cURL and JSON are still required.
+Set `WHOLLY_API_TOKEN` on your server using a credential from **Settings → API access**.
+
+No `use` statement is needed. The exact class name is `\WhollyCrypto\Client`;
+the leading `\` also makes it work inside your application's own namespace.
+Both installation methods provide the same client and API methods.
 
 ## Create an invoice
 
@@ -33,11 +63,10 @@ are not API UUIDs. Projects and stores are created in the console, not through t
 ```php
 <?php
 
-require __DIR__ . '/vendor/autoload.php';
+require_once __DIR__ . '/whollycrypto-php-sdk/autoload.php';
+// With Composer, use require_once __DIR__ . '/vendor/autoload.php'; instead.
 
-use WhollyCrypto\Client;
-
-$client = new Client('https://api.your-domain.com', getenv('WHOLLY_API_TOKEN'));
+$client = new \WhollyCrypto\Client('https://api.your-domain.com', getenv('WHOLLY_API_TOKEN'));
 
 // Persist this key AND the invoice payload with your order before the request.
 // Reuse the same key, credential and payload if the response is lost.
@@ -62,6 +91,9 @@ $result = $client->createInvoice(
 $publicInvoiceId = $result['data']['public_id'];
 $checkoutUrl = $result['links']['checkout'];
 ```
+
+For a runnable example without Composer, see [examples/create-invoice.php](examples/create-invoice.php).
+It reads your URL, credential, IDs and persisted idempotency key from environment variables.
 
 The example UUIDs are placeholders. Return the checkout URL to the customer or
 redirect from your server. Never expose your API token to browser JavaScript,
@@ -174,18 +206,15 @@ Both use the same signature format. Use the **IPN or webhook signing secret**
 from the store configuration, not the merchant API token.
 
 ```php
-use WhollyCrypto\Webhook;
-use WhollyCrypto\Exception\InvalidSignatureException;
-
 $rawBody = file_get_contents('php://input', false, null, 0, 262145);
 
 try {
-    $notification = Webhook::parse(
+    $notification = \WhollyCrypto\Webhook::parse(
         $rawBody,
         getallheaders(),
         getenv('WHOLLY_SIGNING_SECRET'),
     );
-} catch (InvalidSignatureException $error) {
+} catch (\WhollyCrypto\Exception\InvalidSignatureException $error) {
     http_response_code(400);
     exit;
 }
@@ -209,24 +238,20 @@ It additionally needs PDO SQLite and a private writable directory.
 ## Errors, timeouts and retries
 
 ```php
-use WhollyCrypto\Exception\ApiException;
-use WhollyCrypto\Exception\TransportException;
-use WhollyCrypto\Options;
-
-$client = new Client(
+$client = new \WhollyCrypto\Client(
     'https://api.your-domain.com',
     getenv('WHOLLY_API_TOKEN'),
-    new Options(timeoutSeconds: 20, connectTimeoutSeconds: 5, maxRetries: 1),
+    new \WhollyCrypto\Options(timeoutSeconds: 20, connectTimeoutSeconds: 5, maxRetries: 1),
 );
 
 try {
     $invoice = $client->getInvoice($projectId, $publicInvoiceId);
-} catch (ApiException $error) {
+} catch (\WhollyCrypto\Exception\ApiException $error) {
     $status = $error->statusCode;        // e.g. 429
     $code = $error->errorCode;           // e.g. rate_limit_exceeded
     $wait = $error->getRetryAfter();     // seconds, or null
     $detail = $error->getApiMessage();   // Remote detail; may contain customer data
-} catch (TransportException $error) {
+} catch (\WhollyCrypto\Exception\TransportException $error) {
     // A timeout does NOT prove that invoice creation failed.
     // Retry the original invoice payload with the same stored idempotency key.
 }
@@ -259,9 +284,7 @@ ignores them. Keep argument capture off in error-monitoring tools on every versi
 ## Optional checkout reader and Lightning
 
 ```php
-use WhollyCrypto\CheckoutClient;
-
-$checkout = new CheckoutClient('https://pay.your-domain.com');
+$checkout = new \WhollyCrypto\CheckoutClient('https://pay.your-domain.com');
 $public = $checkout->getInvoice($publicInvoiceId);
 $url = $checkout->invoiceUrl($publicInvoiceId);
 ```
@@ -283,17 +306,19 @@ composer install
 composer validate --strict
 composer lint
 composer test
+php tests/run.php --manual-autoload
 ```
 
 Tests cover all 17 merchant endpoints, mocked responses, exact JSON/amounts,
 idempotency, signatures, pagination and a real loopback cURL fixture. They never
 create live invoices or move funds. Development tests additionally need OpenSSL
 CLI/PHP and PDO SQLite for the TLS and durable callback examples. Plain HTTP is only available with
-`new Options(allowInsecureLocalhost: true)` for `localhost`, `127.0.0.1` or `::1`.
+`new \WhollyCrypto\Options(allowInsecureLocalhost: true)` for `localhost`, `127.0.0.1` or `::1`.
 This does not disable HTTPS certificate verification.
 
-The minimum supported runtime is PHP 8.1. All 13 suites pass on PHP 8.1.34 and
-PHP 8.3.6. A pinned-action PHP 8.1–8.5
+The minimum supported runtime is PHP 8.1. The suite is tested on PHP 8.1.34 and
+PHP 8.3.6 with both Composer and the standalone loader, including an isolated
+copy with no `vendor/` directory. A pinned-action PHP 8.1–8.5
 CI template is provided in [ci/github-actions.yml](ci/github-actions.yml).
 Repository maintainers can copy it into `.github/workflows/tests.yml` to enable CI.
 

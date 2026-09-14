@@ -13,7 +13,7 @@ use WhollyCrypto\Internal\Validation;
 /** Merchant API client. Methods preserve the API's complete response envelope. */
 final class Client
 {
-    public const VERSION = '1.0.1';
+    public const VERSION = '1.0.2';
     private JsonClient $http;
 
     public function __construct(string $baseUrl, #[\SensitiveParameter] string $apiToken, ?Options $options = null, ?TransportInterface $transport = null)

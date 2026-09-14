@@ -4,7 +4,7 @@ Configure the client as shown in the [README](../README.md). These examples use
 your Project/Store API UUIDs, not their readable identifiers.
 
 Token registration performs live chain checks. For these longer operations use
-`new Options(timeoutSeconds: 60)` when constructing your client. Your installation's
+`new \WhollyCrypto\Options(timeoutSeconds: 60)` when constructing your client. Your installation's
 reverse-proxy timeout must also permit the operation. A timeout can leave the
 registration completed on the server: check the asset list before retrying.
 

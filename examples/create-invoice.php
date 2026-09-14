@@ -5,9 +5,8 @@ declare(strict_types=1);
 // Running this example creates a REAL invoice on the installation you configure.
 // Persist WHOLLY_IDEMPOTENCY_KEY and this payload before calling it. Do not
 // generate another key merely because a request timed out.
-require dirname(__DIR__) . '/vendor/autoload.php';
-
-use WhollyCrypto\Client;
+// Works directly from the extracted SDK ZIP; no Composer or vendor/ required.
+require_once dirname(__DIR__) . '/autoload.php';
 
 function requiredEnvironment(string $name): string
 {
@@ -18,7 +17,10 @@ function requiredEnvironment(string $name): string
     return $value;
 }
 
-$client = new Client(requiredEnvironment('WHOLLY_API_URL'), requiredEnvironment('WHOLLY_API_TOKEN'));
+$client = new \WhollyCrypto\Client(
+    requiredEnvironment('WHOLLY_API_URL'),
+    requiredEnvironment('WHOLLY_API_TOKEN'),
+);
 $result = $client->createInvoice(
     requiredEnvironment('WHOLLY_PROJECT_ID'),
     requiredEnvironment('WHOLLY_STORE_ID'),

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 - 2026-09-14
+
+- Add a standalone `autoload.php` for manual ZIP/Git installations without Composer or a `vendor/` directory.
+- Document manual installation and direct `new \WhollyCrypto\Client(...)` usage without `use` imports.
+- Make the runnable invoice and IPN/webhook examples work directly from an extracted SDK ZIP.
+- Test standalone loading, namespaced applications and Composer coexistence on PHP 8.1 and 8.3.
+- No API, amount encoding, idempotency or callback-signature changes. Still targets merchant API v1, tested against merchant 3.5.0.
+
 ## 1.0.1 - 2026-09-13
 
 - Support PHP 8.1+ with a matching Composer requirement and PHP 8.1–8.5 CI template.

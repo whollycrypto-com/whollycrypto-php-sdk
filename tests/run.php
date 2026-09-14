@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+require dirname(__DIR__) . (in_array('--manual-autoload', $argv, true) ? '/autoload.php' : '/vendor/autoload.php');
 
 use WhollyCrypto\Client;
 use WhollyCrypto\CheckoutClient;
@@ -91,6 +91,33 @@ function invokeEndpoint(Client $client, string $id, ?array $body): array
 }
 
 $tests = [];
+$tests['standalone loader works without vendor and coexists with Composer in either order'] = static function (): void {
+    $root = dirname(__DIR__);
+    $directory = sys_get_temp_dir() . '/wholly-php-autoload-' . bin2hex(random_bytes(8));
+    check(mkdir($directory, 0700));
+    try {
+        check(copy($root . '/autoload.php', $directory . '/autoload.php'));
+        check(mkdir($directory . '/src', 0700));
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/src', FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::SELF_FIRST) as $file) {
+            $target = $directory . substr($file->getPathname(), strlen($root));
+            check($file->isDir() ? mkdir($target, 0700) : copy($file->getPathname(), $target));
+        }
+        foreach (['isolated', 'composer-first', 'manual-first'] as $mode) {
+            $sdk = $mode === 'isolated' ? $directory : $root;
+            $process = proc_open([PHP_BINARY, __DIR__ . '/autoload-probe.php', $sdk, $mode], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            check(is_resource($process));
+            $output = stream_get_contents($pipes[1]) . stream_get_contents($pipes[2]);
+            fclose($pipes[1]); fclose($pipes[2]);
+            same(0, proc_close($process), 'Autoload probe failed: ' . $output);
+        }
+    } finally {
+        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST) as $file) {
+            $file->isDir() ? rmdir($file->getPathname()) : unlink($file->getPathname());
+        }
+        rmdir($directory);
+    }
+};
+
 $tests['PHP 8.1-compatible value objects retain readonly and no-dynamic-property protections'] = static function (): void {
     $options = new Options();
     $request = new Request('GET', 'https://api.example.test/healthz', ['Authorization' => 'Bearer ' . TOKEN]);
