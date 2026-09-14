@@ -49,7 +49,7 @@ $tests['durable receiver example verifies signatures, deduplicates and does not 
     check($socket !== false); $address = stream_socket_get_name($socket, false); fclose($socket);
     $secret = 'only-an-isolated-fixture-secret';
     $database = $directory . '/queue.sqlite';
-    $env = array_merge(getenv(), ['WHOLLY_SIGNING_SECRET' => $secret, 'WHOLLY_CALLBACK_DB' => $database]);
+    $env = array_merge(getenv(), ['WHOLLY_SIGNING_SECRET' => $secret, 'WHOLLY_CALLBACK_DB' => $database, 'WHOLLY_CALLBACK_PROJECT_ID' => PROJECT]);
     $process = proc_open([PHP_BINARY, '-S', $address, __DIR__ . '/router.php'], [0 => ['pipe', 'r'], 1 => ['file', $directory . '/server.log', 'a'], 2 => ['file', $directory . '/server.log', 'a']], $pipes, __DIR__, $env);
     check(is_resource($process)); fclose($pipes[0]);
     try {
@@ -73,8 +73,14 @@ $tests['durable receiver example verifies signatures, deduplicates and does not 
         same(204, $post('/callbacks', $raw, $signature));
         same(204, $post('/callbacks', $raw, $signature, ASSET)); // Unsigned ID cannot bypass invoice+sequence deduplication.
         $db = new PDO('sqlite:' . $database);
-        same(1, (int) $db->query('SELECT COUNT(*) FROM wholly_notifications')->fetchColumn());
-        same($raw, $db->query('SELECT payload FROM wholly_notifications')->fetchColumn());
+        same(1, (int) $db->query('SELECT COUNT(*) FROM wholly_callback_inbox')->fetchColumn());
+        same($raw, $db->query('SELECT payload FROM wholly_callback_inbox')->fetchColumn());
+        $other = str_replace(INVOICE, ASSET, $raw);
+        $otherSignature = 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $other, $secret);
+        same(204, $post('/callbacks', $other, $otherSignature)); // Same unsigned event ID must not suppress a different signed invoice.
+        same(2, (int) $db->query('SELECT COUNT(*) FROM wholly_callback_inbox')->fetchColumn());
+        $conflict = $raw . ' ';
+        same(409, $post('/callbacks', $conflict, 't=' . $now . ',v1=' . hash_hmac('sha256', $now . '.' . $conflict, $secret)));
         same(0600, fileperms($database) & 0777);
         same(400, $post('/callbacks', $raw . ' ', $signature));
         same(503, $post('/callbacks-fail', $raw, $signature));

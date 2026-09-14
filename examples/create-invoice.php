@@ -5,6 +5,8 @@ declare(strict_types=1);
 // Running this example creates a REAL invoice on the installation you configure.
 // Persist WHOLLY_IDEMPOTENCY_KEY and this payload before calling it. Do not
 // generate another key merely because a request timed out.
+// Variable example: $amount = '25.00'; then 'amount' => (string) $amount.
+// Keep decimal input as a string. Casting a float cannot recover lost precision.
 // Works directly from the extracted SDK ZIP; no Composer or vendor/ required.
 require_once dirname(__DIR__) . '/autoload.php';
 

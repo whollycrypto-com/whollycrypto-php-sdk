@@ -482,6 +482,19 @@ $tests['real cURL loopback: auth, JSON, public requests, redirects, limits and t
 
 require __DIR__ . '/security-integration.php';
 
+$tests['documented callback snapshot verifies for every invoice status'] = static function (): void {
+    $example = json_decode(file_get_contents(dirname(__DIR__) . '/examples/notification.json'), true, 512, JSON_THROW_ON_ERROR);
+    same(9, count($example)); same('49.9', $example['amount']); same('EUR', $example['currency']);
+    foreach (['new', 'processing', 'settled', 'expired', 'invalid', 'cancelled'] as $status) {
+        $example['status'] = $status;
+        $raw = json_encode($example, JSON_THROW_ON_ERROR); $stamp = time();
+        $secret = 'only-an-example-test-secret';
+        $headers = ['Wholly-Signature' => 't=' . $stamp . ',v1=' . hash_hmac('sha256', $stamp . '.' . $raw, $secret), 'Wholly-Event-Id' => PROJECT, 'Wholly-Delivery-Id' => STORE];
+        same($status, Webhook::parse($raw, $headers, $secret)->status());
+        throws(fn () => Webhook::parse($raw, $headers, 'another-endpoint-secret'), InvalidSignatureException::class);
+    }
+};
+
 $failed = 0;
 foreach ($tests as $name => $test) {
     try { $test(); echo 'PASS: ' . $name . "\n"; }

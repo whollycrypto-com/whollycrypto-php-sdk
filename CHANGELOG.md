@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Explain IPN versus webhook selection and secrets, all invoice statuses and the complete callback body.
+- Add callback setup/worker guidance and a verified JSON sample in examples, with links to the live documentation.
+- Show string casts for amount variables and explain why floating-point calculations lose precision.
+- Harden the optional SQLite receiver example with signed project/invoice/sequence deduplication and conflict detection. See the example's migration note.
+
+
 ## 1.1.0 - 2026-09-14
 
 - Support PHP 7.4+ with Composer or the standalone loader, without third-party runtime dependencies.
