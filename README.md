@@ -17,14 +17,14 @@ use a supported PHP 8 release for new deployments.
 ### With Composer
 
 ```bash
-composer require whollycrypto/php-sdk:^2.0
+composer require whollycrypto/php-sdk
 ```
 
 If you need to install directly from GitHub before Packagist indexes a release:
 
 ```bash
 composer config repositories.whollycrypto vcs https://github.com/whollycrypto-com/whollycrypto-php-sdk
-composer require whollycrypto/php-sdk:^2.0
+composer require whollycrypto/php-sdk
 ```
 
 Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';`.
