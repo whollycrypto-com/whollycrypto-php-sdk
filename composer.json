@@ -15,5 +15,5 @@
     "autoload": {"psr-4": {"WhollyCrypto\\": "src/"}},
     "scripts": {"test": "@php tests/run.php", "lint": "@php tests/lint.php"},
     "config": {"sort-packages": true, "allow-plugins": false},
-    "archive": {"exclude": ["/.github", "/ci", "/tests", "/tools", "/.gitignore", "/.gitattributes", "/docs/maintaining.md"]}
+    "archive": {"exclude": ["/.github", "/ci", "/tests", "/tools", "/.gitignore", "/.gitattributes", "/docs/maintaining.md", "/vendor", "/composer.lock", "/auth.json", "/.env", "/.env.*"]}
 }
