@@ -6,7 +6,7 @@ The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **2.2.0** targets API **v1**, tested against merchant **5.1.0**.
+SDK **2.3.0** targets API **v1**, tested against merchant **5.3.0**.
 The SDK and merchant application have independent version numbers.
 
 PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
@@ -31,7 +31,7 @@ Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';
 
 ### Without Composer (manual download)
 
-1. [Download SDK 2.2.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.2.0.zip).
+1. [Download SDK 2.3.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.3.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:
@@ -139,19 +139,23 @@ inserts can shift offsets, so deduplicate by public ID during exports.
 
 ## Choose invoice payment methods
 
-Merchant 5.1.0+ accepts `payment_methods` to limit one invoice to methods already
+Merchant 5.3.0+ accepts ticker-based `payment_methods` to limit one invoice to methods already
 accepted by its store. Omit it (or use `null`) for all store methods. `[]` is invalid.
 
 ```php
 $payload['payment_methods'] = [
-    ['chain_slug' => 'ethereum', 'asset_ids' => [$storeUsdcAssetId]],
+    ['chain_slug' => 'ethereum', 'asset_tickers' => ['USDC', 'USDT']],
     ['chain_slug' => 'bitcoin', 'payment_rail' => 'lightning'],
 ];
 ```
 
-Get `$storeUsdcAssetId` from `listStorePaymentAssets($projectId, $storeId)`:
-use the selected entry's `asset.id`, not its contract, symbol or invoice method ID.
-Omit `asset_ids` to use all ready accepted assets on that chain. Lightning is a
+Copy a selection from **Project → Stores → Payment methods**, or read the selected
+entries from `listStorePaymentAssets($projectId, $storeId)`.
+Tickers are trimmed and matched case-insensitively, within that chain and store.
+If two accepted contracts share a ticker, the request fails even when one is not ready.
+Use `'asset_ids' => [$entry['asset']['id']]` to disambiguate (merchant 5.1.0+).
+Never combine non-null `asset_ids` and `asset_tickers` in one selection.
+Omit both to use all ready accepted assets on that chain. Lightning is a
 separate choice from Bitcoin on-chain. Maximum 64 methods; disabled, wrong-chain
 or unavailable choices fail rather than enable new methods. Store settings stay
 unchanged. Keep the exact original payload and key for retries.
