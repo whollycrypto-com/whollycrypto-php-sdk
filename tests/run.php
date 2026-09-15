@@ -487,10 +487,11 @@ $tests['documented callback snapshot verifies for every invoice status'] = stati
     $example = json_decode(file_get_contents(dirname(__DIR__) . '/examples/notification.json'), true, 512, JSON_THROW_ON_ERROR);
     same(2, $example['payload_version']); same('49.9', $example['amount']); same('EUR', $example['currency']);
     same('ethereum', $example['paid_chain']); same('USDC', $example['paid_asset']);
+    same('58.17342', $example['paid_asset_amount']); same('58.17342', $example['paid_asset_amount_received']);
     same('1.17', $example['settlement_exchange_rate']['rate']);
     foreach (['new', 'processing', 'settled', 'expired', 'invalid', 'cancelled'] as $status) {
         $case = $example; $case['status'] = $status;
-        foreach (['paid_chain', 'paid_asset', 'paid_payment_method_id', 'settlement_exchange_rate'] as $key) {
+        foreach (['paid_chain', 'paid_asset', 'paid_asset_amount', 'paid_asset_amount_received', 'paid_payment_method_id', 'settlement_exchange_rate'] as $key) {
             if ($status !== 'settled') { $case[$key] = null; }
         }
         $raw = json_encode($case, JSON_THROW_ON_ERROR); $stamp = time();
@@ -499,6 +500,8 @@ $tests['documented callback snapshot verifies for every invoice status'] = stati
         $parsed = Webhook::parse($raw, $headers, $secret);
         same($status, $parsed->status());
         same($case['paid_chain'], $parsed->payload['paid_chain']);
+        same($case['paid_asset_amount'], $parsed->payload['paid_asset_amount']);
+        same($case['paid_asset_amount_received'], $parsed->payload['paid_asset_amount_received']);
         same($case['settlement_exchange_rate'], $parsed->payload['settlement_exchange_rate']);
         throws(fn () => Webhook::parse(str_replace('1.17', '9.99', $raw) . ' ', $headers, $secret), InvalidSignatureException::class);
         throws(fn () => Webhook::parse($raw, array_replace($headers, ['Wholly-Event-Id' => PROJECT]), $secret), InvalidSignatureException::class);
