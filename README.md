@@ -6,7 +6,7 @@ The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **2.3.1** targets API **v1**, tested against merchant **5.4.0**.
+SDK **2.4.0** targets API **v1**, tested against merchant **5.5.0**.
 The SDK and merchant application have independent version numbers.
 
 PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
@@ -31,7 +31,7 @@ Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';
 
 ### Without Composer (manual download)
 
-1. [Download SDK 2.3.1 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.3.1.zip).
+1. [Download SDK 2.4.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.4.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:
@@ -161,9 +161,11 @@ ignored. If none match, the invoice uses store defaults. Active selected methods
 still need ready wallets/scanners and trustworthy rates; this never enables an asset.
 Maximum 64 methods; store settings stay unchanged. Older merchants reject unmatched
 choices. Keep the exact original payload and key for retries.
-For a failed creation, inspect `$e->getApiMessage()` on `ApiException` and
-`json_decode($e->getResponse()->body(), true)['error']['details']['payment_methods']`.
-These private diagnostics identify the chain, ticker and missing requirement.
+SDK 2.4.0+ adds actionable, log-safe explanations to `ApiException::getMessage()`.
+For a failed creation, use `$e->getPaymentMethodIssues()` for the chain, ticker,
+`reason_code`, provider counts and suggested action. `$e->getDetails()` returns
+the full error details; `$e->getApiMessage()` returns the server explanation.
+These explicit diagnostics may contain private data.
 Do not expose response bodies to customers or log them indiscriminately.
 See [the selection schema and examples](https://www.whollycrypto.com/api/#create-invoice).
 
@@ -308,6 +310,8 @@ try {
     $code = $error->errorCode;           // e.g. rate_limit_exceeded
     $wait = $error->getRetryAfter();     // seconds, or null
     $detail = $error->getApiMessage();   // Remote detail; may contain customer data
+    $issues = $error->getPaymentMethodIssues(); // Inspect each reason_code/action privately
+    // getMessage() now includes safe scanner/wallet/rate guidance for recognized reasons.
 } catch (\WhollyCrypto\Exception\TransportException $error) {
     // A timeout does NOT prove that invoice creation failed.
     // Retry the original invoice payload with the same stored idempotency key.

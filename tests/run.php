@@ -352,6 +352,22 @@ $tests['status, API errors, malformed/non-JSON failures and rate limits'] = stat
     same(null, (new Response(429, ['retry-after' => 'tomorrow'], ''))->retryAfterSeconds());
 };
 
+$tests['payment readiness errors are actionable without leaking remote text'] = static function (): void {
+    $issue = ['chain_slug'=>'tron','asset_ticker'=>TOKEN,'reason_code'=>'scanner_provider_quorum','usable_independent_providers'=>1,'message'=>TOKEN];
+    $response = reply(['error'=>['code'=>'invalid_payment_request','message'=>TOKEN,'details'=>['payment_methods'=>[$issue,$issue]]]],400);
+    $error = new ApiException(400,'invalid_payment_request',TOKEN,$response);
+    check(Compat::contains($error->getMessage(),'TRON: 1 of 2 independent scanner providers'));
+    same(1,substr_count($error->getMessage(),'TRON:'));
+    check(!Compat::contains($error->getMessage(),TOKEN));
+    same([$issue,$issue],$error->getPaymentMethodIssues());
+    same(TOKEN,$error->getApiMessage());
+    foreach ([null,1,'bad',[['reason_code'=>['bad']]], [['chain_slug'=>TOKEN,'reason_code'=>'rate_unavailable','message'=>TOKEN]], [['chain_slug'=>'tron','reason_code'=>'scanner_provider_quorum','usable_independent_providers'=>TOKEN]]] as $malformed) {
+        $e = new ApiException(400,'invalid_payment_request',TOKEN,reply(['error'=>['details'=>['payment_methods'=>$malformed]]],400));
+        check(!Compat::contains($e->getMessage(),TOKEN));
+    }
+    same([], (new ApiException(400,'http_error',null,new Response(400,[], '<html>no JSON</html>')))->getDetails());
+};
+
 $tests['bounded opt-in retries preserve invoice request identity; other writes never retry'] = static function (): void {
     $transport = new FakeTransport([reply([], 429, ['Retry-After' => '0']), reply(['data' => ['ok' => true]])]);
     $client = new Client('https://api.example.test', TOKEN, new Options(20, 5, 1, 0), $transport);
