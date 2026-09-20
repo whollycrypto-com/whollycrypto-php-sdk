@@ -11,6 +11,9 @@ declare(strict_types=1);
 // Keep that directory outside the web root and writable only by the app user.
 // A separate worker MUST process the queue, fetch the authenticated invoice,
 // match its expected order/project/store/amount/currency and fulfil once.
+// This inbox groups invoice revisions, not events. Its worker must not filter
+// event_type after grouping: payment.received may already carry settled with
+// the same sequence as invoice.settled. Check current state and fulfil once.
 // Works directly from the extracted SDK ZIP; no Composer or vendor/ required.
 require_once dirname(__DIR__) . '/autoload.php';
 
