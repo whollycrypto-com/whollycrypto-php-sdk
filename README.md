@@ -1,12 +1,18 @@
 # Wholly Crypto PHP SDK
 
+Operator integrations (Wholly Crypto 7.4.0+): use the separate `OperatorClient`
+to provision hosted merchants directly or by invitation, manage users, credits,
+projects/stores and signed lifecycle callbacks. See the [Operator API guide](docs/operator-api.md)
+and [onboarding example](examples/operator.php).
+Operator keys stay on your server and are never shared with hosted merchants.
+
 **Merchant 4 upgrade:** read `data.invoice_id` from invoice creation/detail and `invoice_id` from list rows. It matches the callback `invoice_id`. The server no longer returns `public_id`; internal `id` is not a checkout ID. Update custom response readers before upgrading your merchant. For older merchants, keep SDK 1.x or explicitly handle their older response shape.
 
 The official PHP client for your **self-hosted Wholly Crypto merchant API**.
 Create invoices, check payments, manage accepted assets and verify IPN/webhooks.
 
 PHP **7.4+**, cURL and JSON. No framework or third-party runtime packages.
-SDK **2.5.0** targets API **v1**, tested against merchant **5.6.0**.
+SDK **2.6.0** targets API **v1**, tested against merchant **7.4.0**.
 The SDK and merchant application have independent version numbers.
 
 PHP 7.4 compatibility is for existing integrations. It [no longer receives PHP security fixes](https://www.php.net/eol.php);
@@ -31,7 +37,7 @@ Load it in your application with `require_once __DIR__ . '/vendor/autoload.php';
 
 ### Without Composer (manual download)
 
-1. [Download SDK 2.5.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.5.0.zip).
+1. [Download SDK 2.6.0 as a ZIP](https://github.com/whollycrypto-com/whollycrypto-php-sdk/archive/refs/tags/v2.6.0.zip).
 2. Extract it into your application and rename the extracted folder to `whollycrypto-php-sdk`.
    Keep `autoload.php` and the complete `src/` folder together. No `vendor/` folder is needed.
 3. Load the SDK and create the client directly:

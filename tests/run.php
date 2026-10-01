@@ -525,6 +525,7 @@ $tests['documented callback snapshot verifies for every invoice status'] = stati
     }
 };
 
+require __DIR__ . '/operator.php';
 $failed = 0;
 foreach ($tests as $name => $test) {
     try { $test(); echo 'PASS: ' . $name . "\n"; }
